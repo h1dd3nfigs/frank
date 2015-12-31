@@ -42,7 +42,7 @@ class GetProductsCommand extends DoctrineCommand
         $options = array(
                         'categoryId'        => 3,
                         'packageType'       =>'piece',
-                        'pageSize'          => 3,
+                        'pageSize'          => 40,
                         'volumeFrom'        => 100,
                         'originalPriceFrom' => 11.00,
                         'pageNo'            => 1,
@@ -51,28 +51,31 @@ class GetProductsCommand extends DoctrineCommand
                     );
 
         $apiName = 'api.listPromotionProduct';
-        $apiName1 = 'api.getPromotionLinks';
         
         /*
-        * Make api call 
+        * Make api call to get list of products 
         */
 
         $requestUrl = $this->buildRequestUrl($apiName, $options);
 
         $jsonFeed1 = $this->sendRequest($requestUrl);
-// echo $jsonFeed."\n";
+
         $feedArray = json_decode($jsonFeed1, true);
 
         $totalResults = $feedArray['result']['totalResults'];
 
-        $totalPages = ceil($totalResults/40);
+        $totalPages = ceil($totalResults/$options['pageSize']);
+        
+        $products = $feedArray['result']['products'];
+
+        echo 'products array size is '.count($products)."\n\n";
 
         if($totalPages > 1) {
             //call api for every subsequent page and append the returned results to the same feedFile as the 1st page of results that got returned
-            echo "we're gonna cycle through $totalPages pages of api results."; 
+            echo "we're gonna cycle through $totalPages pages of api results.\n\n"; 
             // get results for each page and append onto string $jsonFeed
-            // for ($i=2; $i <= $totalPages ; $i++) { 
-            for ($i=2; $i <= 3 ; $i++) { // cap it at 3 for now assuming we don't want more than 120 products per category intially
+            for ($i=2; $i <= $totalPages ; $i++) { 
+            // for ($i=2; $i <= 3 ; $i++) { // cap it at 3 for now assuming we don't want more than 120 products per category intially
 
                 $options['pageNo'] = $i;
                 $requestUrl = $this->buildRequestUrl($apiName, $options);
@@ -80,16 +83,54 @@ class GetProductsCommand extends DoctrineCommand
                 // echo $jsonFeed."\n";
                 // continue;
                 $feedArray2 = json_decode($jsonFeed2, true);
-                
-                $r = array_merge($feedArray['result']['products'], $feedArray2['result']['products']);
+                // $r = array_merge($feedArray['result']['products'], $feedArray2['result']['products']);
+                $products = array_merge($products, $feedArray2['result']['products']);
+                echo 'products array size is '.count($products)."\n\n";
             }
-
-            print_r($r);exit;
-
         }
-// exit;
-        // $feedArray = json_decode($jsonFeed, true);
-// print_r($r); exit;
+
+
+        /*
+        * Make api call to get affiliate url for each product
+        */
+
+        $fields_to_return1 = array(
+                        'totalResults',
+                        'trackingId',
+                        'publisherId',
+                        'url',
+                        'promotionUrl',
+                        );
+
+        $productUrls = $this->array_value_recursive('productUrl', $products);
+
+
+        $options1 = array(
+            //'productId'       => '1750047098',
+            'trackingId'    => TRACKING_ID,
+            'fields'            => implode(',', $fields_to_return1),
+            'urls'          => implode(',', $productUrls),
+            
+        );
+
+
+        $apiName1 = 'api.getPromotionLinks';
+
+        $requestUrl1 = $this->buildRequestUrl($apiName1, $options1);
+
+        $jsonFeed3 = $this->sendRequest($requestUrl1);
+        $affiliateUrls = json_decode($jsonFeed3, true)['result']['promotionUrls'];
+
+        /*
+        * call getPromotionLinks api for 50 urls at a time because of api limit
+        */
+
+
+        // Code here
+
+
+
+
         /*
         * Store product feed in db 
         */
@@ -101,7 +142,7 @@ class GetProductsCommand extends DoctrineCommand
                                         ->getRepository('AppBundle:Category')
                                         ->find(1);
 
-        foreach ($feedArray['result']['products'] as $p) {
+        foreach ($products as $key => $p) {
            
             $product = new Product();
             $product
@@ -113,7 +154,7 @@ class GetProductsCommand extends DoctrineCommand
                     ->setAli30DaysCommission($p['30daysCommission'])
                     ->setAliVolume($p['volume'])
                     ->setAliCategoryId($options['categoryId'])
-                    ->setAliAffiliateUrl()
+                    ->setAliAffiliateUrl($affiliateUrls[$key]['promotionUrl'])
             ;
 
             $em = $this->getEntityManager('default');
@@ -123,6 +164,7 @@ class GetProductsCommand extends DoctrineCommand
 
             // $output->writeln($p['productTitle']);
         }
+        echo 'just sent '.count($products).' products to the db'."\n\n";
     }
 
     private function buildRequestUrl($apiName, $options = array(), $productId = '', $urls = array())
@@ -147,6 +189,16 @@ class GetProductsCommand extends DoctrineCommand
         $response = $buzz->get($requestUrl);
 
         return $feed = $response->getContent();
+    }
+
+    private function array_value_recursive($key, array $arr){
+        
+        $val = array();
+        array_walk_recursive($arr, function($v, $k) use($key, &$val){
+            if($k == $key) array_push($val, $v);
+        });
+        
+        return count($val) > 1 ? $val : array_pop($val);
     }
 
 }
