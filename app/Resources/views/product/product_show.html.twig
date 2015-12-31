@@ -1,0 +1,18 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Product | {{product.aliProductTitle}} {% endblock %}
+
+{% block body %}
+	<div>
+		<a href="{{ path('list') }}">
+			Back
+		</a>
+	</div>
+	<h3>Ali Product ID: {{product.aliProductId}}</h3>
+	<p>Ali Product Name: {{product.aliProductTitle}}</p>
+	<p>User-uploaded Images:</p> 
+		<div style="display:flex">
+			USER IMAGES HERE
+		</div>
+	
+{% endblock %}
