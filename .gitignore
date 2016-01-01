@@ -10,4 +10,4 @@
 /vendor/
 /web/bundles/
 /hide/
-/src/AppBundle/Command/settings.php
+/src/AppBundle/Command/*settings.php
