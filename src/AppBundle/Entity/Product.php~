@@ -81,15 +81,21 @@ class Product
    /**
      * @var string
      *
-     * @ORM\Column(name="ali_affiliate_url", type="string", nullable=true)
+     * @ORM\Column(name="ali_affiliate_url", type="string")
      */
-    private $ali_affiliate_url = '';
+    private $ali_affiliate_url;
 
     /**
      * @ORM\ManyToOne(targetEntity="Category", inversedBy="products")
      * @ORM\JoinColumn(name="category_id", referencedColumnName="id")
      */
     protected $category;
+
+    /**
+     * @ORM\OneToMany(targetEntity="Photo", mappedBy="product")
+     */
+    protected $photos;
+
 
     /**
      * Get id
@@ -316,5 +322,29 @@ class Product
     public function getCategory()
     {
         return $this->category;
+    }
+
+    /**
+     * Set aliAffiliateUrl
+     *
+     * @param string $aliAffiliateUrl
+     *
+     * @return Product
+     */
+    public function setAliAffiliateUrl($aliAffiliateUrl='')
+    {
+        $this->ali_affiliate_url = $aliAffiliateUrl;
+
+        return $this;
+    }
+
+    /**
+     * Get aliAffiliateUrl
+     *
+     * @return string
+     */
+    public function getAliAffiliateUrl()
+    {
+        return $this->ali_affiliate_url;
     }
 }

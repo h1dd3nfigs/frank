@@ -17,6 +17,7 @@ class AppKernel extends Kernel
             new Doctrine\Bundle\DoctrineBundle\DoctrineBundle(),
             new Sensio\Bundle\FrameworkExtraBundle\SensioFrameworkExtraBundle(),
             new Sensio\Bundle\BuzzBundle\SensioBuzzBundle(),
+            new Aws\Symfony\AwsBundle(),
             new AppBundle\AppBundle(),
         );
 

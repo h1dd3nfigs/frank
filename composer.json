@@ -18,7 +18,8 @@
         "sensio/distribution-bundle": "~4.0",
         "sensio/framework-extra-bundle": "^3.0.2",
         "incenteev/composer-parameter-handler": "~2.0",
-        "sensio/buzz-bundle": "dev-master"
+        "sensio/buzz-bundle": "dev-master",
+        "aws/aws-sdk-php-symfony": "^1.1"
     },
     "require-dev": {
         "sensio/generator-bundle": "~2.3"

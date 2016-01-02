@@ -92,6 +92,12 @@ class Product
     protected $category;
 
     /**
+     * @ORM\OneToMany(targetEntity="Photo", mappedBy="product")
+     */
+    protected $photos;
+
+
+    /**
      * Get id
      *
      * @return integer
@@ -325,7 +331,7 @@ class Product
      *
      * @return Product
      */
-    public function setAliAffiliateUrl($aliAffiliateUrl='')
+    public function setAliAffiliateUrl($aliAffiliateUrl)
     {
         $this->ali_affiliate_url = $aliAffiliateUrl;
 
@@ -340,5 +346,46 @@ class Product
     public function getAliAffiliateUrl()
     {
         return $this->ali_affiliate_url;
+    }
+    /**
+     * Constructor
+     */
+    public function __construct()
+    {
+        $this->photos = new \Doctrine\Common\Collections\ArrayCollection();
+    }
+
+    /**
+     * Add photo
+     *
+     * @param \AppBundle\Entity\Photo $photo
+     *
+     * @return Product
+     */
+    public function addPhoto(\AppBundle\Entity\Photo $photo)
+    {
+        $this->photos[] = $photo;
+
+        return $this;
+    }
+
+    /**
+     * Remove photo
+     *
+     * @param \AppBundle\Entity\Photo $photo
+     */
+    public function removePhoto(\AppBundle\Entity\Photo $photo)
+    {
+        $this->photos->removeElement($photo);
+    }
+
+    /**
+     * Get photos
+     *
+     * @return \Doctrine\Common\Collections\Collection
+     */
+    public function getPhotos()
+    {
+        return $this->photos;
     }
 }
