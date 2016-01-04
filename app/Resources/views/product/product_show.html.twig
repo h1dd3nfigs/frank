@@ -10,10 +10,14 @@
 	</div>
 	<h3>Ali Product ID: {{product.aliProductId}}</h3>
 	<p>Ali Product Name: {{product.aliProductTitle}}</p>
+	<p> Price: {{product.aliSalePrice}}</p>
 	<p><a href="{{ product.aliAffiliateUrl }}" target="_blank">Buy</a></p>
 	<p>User-uploaded Images:</p> 
-		<div style="display:flex">
-			USER IMAGES HERE
+
+	{% for photo in photos %}
+		<div style="float:left;">
+			<img src="{{ photo.awsImgUrl }}" alt="USER IMAGES HERE">
 		</div>
+	{% endfor %}
 	
 {% endblock %}

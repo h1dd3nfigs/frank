@@ -88,19 +88,27 @@ class DefaultController extends Controller
     {
         $product = $this->getDoctrine()
                         ->getRepository('AppBundle:Product')
-                        ->find($id);
+                        ->find($id)
+                    ;
 
         if (!$product) {
             throw $this->createNotFoundException(
                 'No product found for id '.$id
             );
         }
+        
+        $photos = $product->getPhotos();
 
         // $imgs_string = '';
         // foreach ($product->getUserImgUrls() as $url) {
         //     $imgs_string .= '<img src="'.$url.'"><br>';
         // }
-        return $this->render('product/product_show.html.twig', array('product' => $product));
+        return $this->render('product/product_show.html.twig', 
+                            array(
+                                'product' => $product,
+                                'photos'=> $photos,
+                            )
+                        );
         // return new Response('<a href="/list">Back to Home</a><br><br>Showing product id '.$product->getId().'<br><br>'.$product->getAliName().'<br><br>'.$imgs_string);
     }
 

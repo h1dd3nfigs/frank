@@ -8,7 +8,7 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use AppBundle\Entity\Product;
-use AppBundle\Entity\Photos;
+use AppBundle\Entity\Photo;
 use Aws\S3\S3Client; 
 
 include('aws-settings.php');
@@ -46,61 +46,61 @@ class GetPhotosCommand extends DoctrineCommand
         */
 
 
-        $kernel = $this->getContainer()->get('kernel');
-        $path = $kernel->locateResource('@AppBundle/Command/');
+        // $kernel = $this->getContainer()->get('kernel');
+        // $path = $kernel->locateResource('@AppBundle/Command/');
 
-        $s3Client = new S3Client(array(
-            'credentials' => array(
-                'key'    => AWS_ACCESS_KEY_ID,
-                'secret' => AWS_SECRET_ACCESS_KEY,
-            ),
-            'region'  => 'us-west-2',
-            'version' => '2006-03-01',
-            'http'    => [
-                'verify' => $path.CA_BUNDLE_FILENAME,
-            ]
-        ));
+        // $s3Client = new S3Client(array(
+        //     'credentials' => array(
+        //         'key'    => AWS_ACCESS_KEY_ID,
+        //         'secret' => AWS_SECRET_ACCESS_KEY,
+        //     ),
+        //     'region'  => 'us-west-2',
+        //     'version' => '2006-03-01',
+        //     'http'    => [
+        //         'verify' => $path.CA_BUNDLE_FILENAME,
+        //     ]
+        // ));
 
-       
-       // // In case I need presignedUrl to upload objects to my s3 bucket
-       // $cmd = $s3Client->getCommand('GetObject', [
-       //      'Bucket' => 'test-galirie',
-       //      'Key'    => 'testfile.txt'
-       //  ]);
+        // Register the s3 stream wrapper from an S3Client object
+        // $s3Client->registerStreamWrapper();
 
-
-       //  $request = $s3Client->createPresignedRequest($cmd, '+20 minutes');
-
-       //  // Get the actual presigned-url
-       //  $presignedUrl = (string) $request->getUri();
-        // return;
-
-        // Register the stream wrapper from an S3Client object
-        $s3Client->registerStreamWrapper();
+        /*
+        * Get an object from its s3 bucket
+        */
 
         // $response = file_get_contents('s3://test-galirie/testfile.txt');
 
+        /*
+        * Put an object into a s3 bucket
+        */
 
-        $dir = $path."userImgs/aliproductId-32251240493/";
+        // $dir = $path."userImgs/aliproductId-32251240493/";
 
-        $context = stream_context_create(array(
-            's3' => array(
-                'ACL' => 'public-read'
-            )
-        ));
+        // $context = stream_context_create(array(
+        //     's3' => array(
+        //         'ACL' => 'public-read'
+        //     )
+        // ));
 
-        $data = array(
-                    'body'=>file_get_contents($dir.'32251240493-img1.jpg'),
-                    'contentType'=>'image/jpeg',
-                   );
+        // $data = array(
+        //             'body'=>file_get_contents($dir.'32251240493-img1.jpg'),
+        //             'contentType'=>'image/jpeg',
+        //            );
 
-        $result = file_put_contents('s3://test-galirie/32251240493-img1.jpg', 
-                                    $data, 0 , $context);
+        // $result = file_put_contents('s3://test-galirie/32251240493-img1.jpg', 
+        //                             $data, 0 , $context);
 
-var_dump($result);
-return;
-        // $this->downloadAllUserImgs();
 
+        /*
+        * Get the web-accessible URL for the Amazon S3 object 
+        */
+        
+        // $aws_img_url = $s3Client->getObjectUrl('test-galirie','32251240493-img1.jpg');
+
+       
+
+        $this->downloadAllUserImgs();
+        return;
     }
 
     /*
@@ -169,7 +169,7 @@ return;
         // for ($i=1; $i <= $total_pages ; $i++) { 
         for ($i=1; $i <= 2 ; $i++) { 
             // $i = 2;
-            echo 'i is now '.$i;
+            echo "i is now $i\n\n";
             $domname = 'dom_feedback'.$i;
 
             $$domname = new \DOMDocument();
@@ -214,27 +214,110 @@ return;
         parse_str( parse_url( $this->getFeedbackUrl(), PHP_URL_QUERY));
         $this->ali_product_id = $productId ;
 
-        $kernel = $this->getContainer()->get('kernel');
-        $path = $kernel->locateResource('@AppBundle/Command/');
+        /*
+        * Use entity manager to locate the row in Product table associated with these user photos
+        */ 
+        $product = $this->getContainer()
+                        ->get('doctrine')
+                        ->getRepository('AppBundle:Product')
+                        ->findOneBy(
+                            array('ali_product_id'=> $this->ali_product_id),
+                            array('id'=>'DESC')
+                        )
+                    ;
 
-        $dir = $path."userImgs/aliproductId-$this->ali_product_id/";
-    
-        if (!is_dir($dir))
-            mkdir($dir, 0777, true);
+        // if (!is_dir($dir))
+        //     mkdir($dir, 0777, true);
 
         echo "We found ".count($this->user_imgs)."user-uploaded pics.\n\n";
 
-        for ($i=0; $i < count($this->user_imgs); $i++) { 
-    
-            $filename = "$this->ali_product_id-img$i.jpg";
+        $kernel = $this->getContainer()->get('kernel');
+        $path = $kernel->locateResource('@AppBundle/Command/');
 
-            // Download the image to AWS S3 bucket
-            if(copy($this->user_imgs[$i], $dir.$filename))
-                echo "Done downloading : $filename into $dir directory \n\n";
+        $s3Client = new S3Client(array(
+            'credentials' => array(
+                'key'    => AWS_ACCESS_KEY_ID,
+                'secret' => AWS_SECRET_ACCESS_KEY,
+            ),
+            'region'  => 'us-west-2',
+            'version' => '2006-03-01',
+            'http'    => [
+                'verify' => $path.CA_BUNDLE_FILENAME,
+            ]
+        ));
 
+        $context = stream_context_create(array(
+            's3' => array(
+                'ACL' => 'public-read'
+            )
+        ));
+       
+        // Register the s3 stream wrapper from an S3Client object
+        $s3Client->registerStreamWrapper();
+        
+        $bucket = 'test-galirie';
+        
+        $key_prefix = $this->ali_product_id; 
+        
+        foreach ($this->user_imgs as $i => $aliImgUrl) { 
+      
+            /*
+            * Download the image into s3 bucket
+            */
+
+            $key = "$this->ali_product_id-img$i.jpg";
+            // $key = "$this->ali_product_id-img0.jpg";
+
+            $data = array(
+                        'body'=>file_get_contents($aliImgUrl),
+                        'contentType'=>'image/jpeg', // always jpg?
+                       );
+            
+            // Only upload to the s3 bucket if the object isn't already there
+
+            if(!file_exists('s3://'.$bucket.'/'.$key_prefix.'/'.$key)){
+
+                $result = file_put_contents('s3://'.$bucket.'/'.$key_prefix.'/'.$key, 
+                            $data, 0 , $context);
+                
+                if($result){
+                    echo "Done downloading : $key into s3 bucket: $bucket directory \n\n";
+                } else {
+                    echo "An error occurred while trying to upload $key into  s3 bucket $bucket\n\n";  
+                    continue;
+                }
+
+            } else { 
+                echo "The photo $key is already in the s3 bucket $bucket.\n\n";
+            }
+
+
+            
+            $aws_img_url = $s3Client->getObjectUrl($bucket, $key_prefix.'/'.$key);
+
+            /*
+            * Insert the aws_img_url along with other photo info into Photo table
+            */
+            // $photo_name ='photo'.$i;
+            // $$photo_name = new Photo();
+            $photo = new Photo();
+            
+            $photo
+                    ->setProduct($product)
+                    ->setRating(0)
+                    ->setAliHelpfulCount(0)
+                    ->setAwsImgUrl($aws_img_url)
+                    ->setAliImgUrl($aliImgUrl)
+                    // ->setAliImgUrl($this->user_imgs[0])
+            ;
+
+            $em = $this->getEntityManager('default');
+            $em->persist($photo);
+            $em->flush();
+            // break;
         }
 
-        return true;
+        return;
     }   
 
 
