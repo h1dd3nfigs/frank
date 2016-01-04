@@ -53,7 +53,7 @@ class Product
     /**
      * @var string
      *
-     * @ORM\Column(name="ali_sale_price", type="string")
+     * @ORM\Column(name="ali_sale_price", type="smallint")
      */
     private $ali_sale_price;
     

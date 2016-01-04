@@ -150,7 +150,7 @@ class GetProductsCommand extends DoctrineCommand
                     ->setAliProductId($p['productId'])
                     ->setAliProductTitle($p['productTitle'])
                     ->setAliProductUrl($p['productUrl'])
-                    ->setAliSalePrice($p['salePrice'])
+                    ->setAliSalePrice(round(floatval(substr($p['salePrice'], 4)))) // Must change model to make column type=smallint, convert str to int price format, e.g. from 'US $11.17' to 11
                     ->setAli30DaysCommission($p['30daysCommission'])
                     ->setAliVolume($p['volume'])
                     ->setAliCategoryId($options['categoryId'])
