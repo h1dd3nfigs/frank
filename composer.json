@@ -19,7 +19,8 @@
         "sensio/framework-extra-bundle": "^3.0.2",
         "incenteev/composer-parameter-handler": "~2.0",
         "sensio/buzz-bundle": "dev-master",
-        "aws/aws-sdk-php-symfony": "^1.1"
+        "aws/aws-sdk-php-symfony": "^1.1",
+        "phpunit/phpunit": "^4.8"
     },
     "require-dev": {
         "sensio/generator-bundle": "~2.3"

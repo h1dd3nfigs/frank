@@ -188,8 +188,9 @@ class GetPhotosCommand extends DoctrineCommand
                 $this->user_imgs[] = $node->getAttribute( 'src' );
             }
 
-            echo "Delaying for 3 seconds between each feedback page's request\n\n";
-            sleep(3);
+            $delay = 4; //in seconds, to rate limit my requests
+            echo "Delaying for $delay seconds between each feedback page's request\n\n";
+            sleep($delay);
 
         }
 
