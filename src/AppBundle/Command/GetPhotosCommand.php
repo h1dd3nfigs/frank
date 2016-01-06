@@ -38,6 +38,7 @@ class GetPhotosCommand extends DoctrineCommand
     {
         $this->product_url = $input->getArgument('productUrl');
         $output->writeln('scraping photos from '.$this->product_url."\n\n");
+        return;
         /*
         * 1-Query Product table and return productUrl for all products missing photos that haven't been checked in a week
         * 2-For each product, call other methods here to end up with multi-level array of photos
@@ -107,16 +108,23 @@ class GetPhotosCommand extends DoctrineCommand
     * Get product URL from user input then use it to get url for feedback <iframe>
     */
      
-    private function setFeedbackUrl()
+    // private function setFeedbackUrl()
+    public function setFeedbackUrl($productUrl)
     {
         $dom_product = new \DOMDocument();
-        @$dom_product->loadHTMLFile($this->product_url);
+        // @$dom_product->loadHTMLFile($this->product_url);
+        @$dom_product->loadHTMLFile($productUrl);
+        
+        $feedback_urls = array();
 
         foreach ($dom_product->getElementsByTagName('iframe') as $node) {
             $feedback_urls[] = $node->getAttribute( 'thesrc' );
         }
+        if($feedback_urls)
+            return $feedbackUrl = $feedback_urls[0] ;
 
-        return $this->feedback_url = $feedback_urls[0] ;
+        return null;
+        // return $this->feedback_url = $feedback_urls[0] ;
     }
 
     private function getFeedbackUrl()
