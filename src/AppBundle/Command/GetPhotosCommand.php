@@ -16,10 +16,10 @@ include('aws-settings.php');
 class GetPhotosCommand extends DoctrineCommand
 {
 
-    private $product_url = '';
-    private $ali_product_id = '';
-    private $feedback_url = '';
-    private $user_imgs = array();
+    // private $product_url = '';///Users/ruthfombrun/galirie/src/AppBundle/Command/Cached-Urls-for-Testing-Commands/ProductUrl-32251240493.html';
+    // private $ali_product_id = '';
+    // private $feedback_url = '';
+    // private $user_imgs = array();
 
     protected function configure()
     {
@@ -32,12 +32,15 @@ class GetPhotosCommand extends DoctrineCommand
                 'Provide the url for the product you\'d like see user photos of.'
             )
         ;
+        
+
     }
 
     protected function execute(InputInterface $input, OutputInterface $output)
     {
-        $this->product_url = $input->getArgument('productUrl');
-        $output->writeln('scraping photos from '.$this->product_url."\n\n");
+        $product_url = $input->getArgument('productUrl');
+        $output->writeln('scraping photos from '.$product_url."\n\n");
+        // echo $this->setFeedbackUrl();
         return;
         /*
         * 1-Query Product table and return productUrl for all products missing photos that haven't been checked in a week
@@ -108,48 +111,36 @@ class GetPhotosCommand extends DoctrineCommand
     * Get product URL from user input then use it to get url for feedback <iframe>
     */
      
-    // private function setFeedbackUrl()
-    public function setFeedbackUrl($productUrl)
+    public function getFeedbackUrl($productUrl)
     {
         $dom_product = new \DOMDocument();
-        // @$dom_product->loadHTMLFile($this->product_url);
         @$dom_product->loadHTMLFile($productUrl);
         
-        $feedback_urls = array();
+        $feedbackUrls = array();
 
         foreach ($dom_product->getElementsByTagName('iframe') as $node) {
-            $feedback_urls[] = $node->getAttribute( 'thesrc' );
+            $feedbackUrls[] = $node->getAttribute( 'thesrc' );
         }
-        if($feedback_urls)
-            return $feedbackUrl = $feedback_urls[0] ;
+
+        if($feedbackUrls)
+            return $feedbackUrl = $feedbackUrls[0] ;
 
         return null;
-        // return $this->feedback_url = $feedback_urls[0] ;
     }
 
-    private function getFeedbackUrl()
-    {
-        if($this->feedback_url !== ''){
-            return $this->feedback_url ;
-    
-        }       
-        return $this->setFeedbackUrl();
-    }
     
     /*
     * Get total num of pages of feedback 
     * Example: from <iframe> feedback_url, grab value in <div class="pos-right">, within 2nd <a> tag
     */
 
-    private function getNumReviewPages()
+    public function getNumReviewPages($feedbackUrl)
     {
-        $feedback_url = $this->getFeedbackUrl();
-
         $tagName = 'div';
         $attrName = 'class';
 
         $dom_feedback = new \DOMDocument();
-        @$dom_feedback->loadHTMLFile($feedback_url."&page=1");
+        @$dom_feedback->loadHTMLFile($feedbackUrl);
         $domxpath = new \DOMXPath($dom_feedback);
 
 
@@ -157,10 +148,10 @@ class GetPhotosCommand extends DoctrineCommand
 
 
         foreach ($review_page_nodelist as $n) {
-            $total_num_review_pages = $n->nodeValue;
+            $numReviewPages = $n->nodeValue;
         }
 
-        return $total_num_review_pages;
+        return $numReviewPages;
     }
     
     /*
@@ -168,20 +159,15 @@ class GetPhotosCommand extends DoctrineCommand
     * Grab any user-uploaded pics
     */
 
-    private function getImgUrls()
-    {
+    public function getImgUrls($feedbackUrl, $numReviewPages)
+    {        
+        // for ($i=1; $i <= $numReviewPages ; $i++) { 
+        for ($i=1; $i <= 3 ; $i++) { 
 
-        $total_pages = $this->getNumReviewPages();
-        echo "Looking for pics on $total_pages pages\n\n";
-
-        // for ($i=1; $i <= $total_pages ; $i++) { 
-        for ($i=1; $i <= 2 ; $i++) { 
-            // $i = 2;
-            echo "i is now $i\n\n";
             $domname = 'dom_feedback'.$i;
 
             $$domname = new \DOMDocument();
-            @$$domname->loadHTMLFile($this->feedback_url."&page=$i");
+            @$$domname->loadHTMLFile($feedbackUrl."&page=$i");
 
             $tagName = 'div';
             $attrName = 'class';
@@ -193,29 +179,18 @@ class GetPhotosCommand extends DoctrineCommand
             $filtered = $$domxpathname->query("//$tagName" . '[@' . $attrName . "='$attrValue']/$childTagName");
 
             foreach ($filtered as $node) {
-                $this->user_imgs[] = $node->getAttribute( 'src' );
+                $userImgs[] = $node->getAttribute( 'src' );
             }
-
-            $delay = 4; //in seconds, to rate limit my requests
-            echo "Delaying for $delay seconds between each feedback page's request\n\n";
-            sleep($delay);
+     
+            // $delay = 4; //in seconds, to rate limit my requests
+            // echo "Delaying for $delay seconds between each feedback page's request\n\n";
+            // sleep($delay);
 
         }
 
-        return $this->user_imgs ;
+        return $userImgs ;
     }
 
-    private function getUserImgHtml()
-    {
-        $review_img_urls = $this->getImgUrls();
-
-        $user_img_html = '';
-        foreach ($review_img_urls as $url) {
-            $user_img_html .="<img src='$url'><br>";
-        }
-        
-        return $user_img_html;
-    }
 
     private function downloadAllUserImgs()
     {

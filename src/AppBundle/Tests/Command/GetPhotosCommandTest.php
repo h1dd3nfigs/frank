@@ -32,28 +32,56 @@ class GetPhotosCommandTest extends KernelTestCase
         $commandTester = new CommandTester($command);
         $commandTester->execute(array(
             'command'      => $command->getName(),
-            'productUrl'         => 'stuff.com',
+            'productUrl'         => $this->path_to_appbundle.'Command/Cached-Urls-for-Testing-Commands/ProductUrl-32251240493.html',
         ));
 
-        // $this->assertRegExp('/scraping photos from/', $commandTester->getDisplay());
-        $this->assertStringStartsWith('scraping photos from stuff.com', $commandTester->getDisplay());
+        $prefix = 'scraping photos from /Users/ruthfombrun/galirie/src/AppBundle/Command/Cached-Urls-for-Testing-Commands/ProductUrl-32251240493.html';
+        // $message = 'Command description doesn\'t contain the right product URL from the CLI input arg';
+        
+        $this->assertStringStartsWith($prefix, $commandTester->getDisplay());
 
-        // ...
     }
 
-    public function testSetFeedbackUrl()
+    public function testGetFeedbackUrl()
     {
-        //FEEDBACK URL = http://feedback.aliexpress.com/display/productEvaluation.htm?productId=32251240493&ownerMemberId=200009299&companyId=200001989&memberType=seller&startValidDate=
-        //PRODUCT URL = http://www.aliexpress.com/item//32251240493.html  
-        //CACHED PRODUCT URL = path/to/file/ProductUrl-32251240493.html
         $getphotoscommand = new GetPhotosCommand();
 
-        
-        $productUrl  = $this->path_to_appbundle.'Command/Cached-Urls-for-Testing-Commands/ProductUrl-32251240493.html';
+        $productUrl = $this->path_to_appbundle.'Command/Cached-Urls-for-Testing-Commands/ProductUrl-32251240493.html';
         $feedbackUrl = 'http://feedback.aliexpress.com/display/productEvaluation.htm?productId=32251240493&ownerMemberId=200009299&companyId=200001989&memberType=seller&startValidDate=';
-        $message = 'The scraper did not properly extract the URL for the feedback page from the cached copy of a HTML page http://www.aliexpress.com/item//32251240493.html';
+        // $message = 'The scraper did not properly extract the URL for the feedback page from the cached copy of a HTML page';
 
-        $this->assertEquals($feedbackUrl, $getphotoscommand->setFeedbackUrl($productUrl), $message);
-        // $this->assertEquals('FEEDBACK URL', $getphotoscommand->setFeedbackUrl('CACHED PRODUCT URL'));
+        $this->assertEquals($feedbackUrl, $getphotoscommand->getFeedbackUrl($productUrl));
+        
     }
+
+    public function testgetNumReviewPages()
+    {
+        $getphotoscommand = new GetPhotosCommand();
+
+        $feedbackUrl = $this->path_to_appbundle.'Command/Cached-Urls-for-Testing-Commands/FeedbackUrl&page=1';
+        $numReviewPages = 141;
+        // $message = 'The scraper did not properly extract the URL for the feedback page from the cached copy of a HTML page http://www.aliexpress.com/item//32251240493.html';
+
+        $this->assertEquals($numReviewPages, $getphotoscommand->getNumReviewPages($feedbackUrl));
+        
+    }
+
+    public function testgetImgUrls()
+    {
+        $getphotoscommand = new GetPhotosCommand();
+        $feedbackUrl = $this->path_to_appbundle.'Command/Cached-Urls-for-Testing-Commands/FeedbackUrl';
+        $numReviewPages = 141;
+        // $message = 'The scraper did not properly copy the URLs for all 5 images on the 1st 3 pages of reviews';
+        
+        $userImgUrls = array(
+                        'http://g01.a.alicdn.com/kf/UT8y9GmXBNXXXagOFbX2.jpg',
+                        'http://g04.a.alicdn.com/kf/UT8XW9nXydXXXagOFbX1.jpg',
+                        'http://g02.a.alicdn.com/kf/UT8dtadXBXaXXagOFbXE.jpg',
+                        'http://g04.a.alicdn.com/kf/UT8gvafXp4XXXagOFbXj.jpg',
+                        'http://g04.a.alicdn.com/kf/UT8k1ydXy0aXXagOFbXL.jpg',
+                    );
+        
+        $this->assertEquals($userImgUrls, $getphotoscommand->getImgUrls($feedbackUrl, $numReviewPages));
+    }
+
 }
