@@ -12,3 +12,4 @@
 /hide/
 /src/AppBundle/Command/*settings.php
 /src/AppBundle/Command/*.crt
+/src/AppBundle/Command/Cached-Urls-for-Testing-Commands/ali-feedback-frame.js
