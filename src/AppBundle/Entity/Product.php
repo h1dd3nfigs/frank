@@ -32,7 +32,7 @@ class Product
     /**
      * @var string
      *
-     * @ORM\Column(name="ali_product_id", type="string")
+     * @ORM\Column(name="ali_product_id", type="string", unique = true)
      */
     private $ali_product_id;
 
@@ -516,17 +516,17 @@ class Product
 
     /**
      * Check if the product has newer reviews on aliexpress.com 
-     * that we haven't yet crawled through 
+     * that we haven't yet scraped through 
      *
      * @return boolean
      */
-    public function needsCrawl($dateOfLatestReviewOnAli)
+    public function needsScrape($dateOfLatestReviewOnAli)
     {
         // Is the most recent review uploaded to aliexpress newer than the latest review in the db?
         // both dates are unix timestamps
-        if($dateOfLatestReviewOnAli < $this->date_of_latest_review)
-            return false;
+        if($dateOfLatestReviewOnAli > $this->date_of_latest_review)
+            return true;
 
-        return true;
+        return false;
     }
 }

@@ -37,11 +37,22 @@ class GetPhotosCommand extends DoctrineCommand
         // $productUrl ='http://www.aliexpress.com/item/Navy-Lace-Satin-Patchwork-Party-Maxi-Dress-LC6809/32251240493.html';
         // $feedbackUrl = 'http://feedback.aliexpress.com/display/productEvaluation.htm?productId=32251240493&ownerMemberId=200009299&companyId=200001989&memberType=seller&startValidDate=';
 
+
         // skinny white pants
-        $productUrl = 'http://www.aliexpress.com/item/Hot-Sale-Women-Pencil-Pants-Skinny-Zipper-Hollow-Out-Black-White-2015-New-Fashion-Casual-Slim/32322377471.html';
+        // $productUrl = 'http://www.aliexpress.com/item/Hot-Sale-Women-Pencil-Pants-Skinny-Zipper-Hollow-Out-Black-White-2015-New-Fashion-Casual-Slim/32322377471.html';
+        $productUrl = $input->getArgument('aliProductUrl');
+        $output->writeln("the aliProductUrl is $productUrl \n\n");
         // $feedbackUrl = 'feedback.aliexpress.com/display/productEvaluation.htm?productId=32322377471&ownerMemberId=220754190&companyId=230737239&memberType=seller&startValidDate=';
-        $feedbackUrl = $this->getFeedbackUrl($productUrl, false);
+        $feedbackUrl = $this->getFeedbackUrl($productUrl);
+     
         $htmlStringFeedbackUrlPics = $this->getFeedbackUrlWithOnlyPics($feedbackUrl);
+        
+        $ali_feedback_ids = $this->getAliFeedbackIds($htmlStringFeedbackUrlPics);
+        // var_dump($ali_feedback_ids);exit;
+        $ali_product_id = $this->getAliProductIdFromFeedbackUrl($feedbackUrl);
+        
+        $this->getAliHelpfulCounts($ali_feedback_ids, $ali_product_id);
+        return;
 
         echo "\n\nnum review pages with pics only: ";
         echo $numReviewPages = $this->getNumReviewPages($htmlStringFeedbackUrlPics);
@@ -50,59 +61,45 @@ class GetPhotosCommand extends DoctrineCommand
         echo $numReviewsWithPics = $this->getNumReviews($htmlStringFeedbackUrlPics);
         
         echo "\n\ndate of the latest review: ";
-        echo $this->getDateOfLatestReviewOnAli($htmlStringFeedbackUrlPics);
+        echo $dateOfLatestReviewOnAli = $this->getDateOfLatestReviewOnAli($htmlStringFeedbackUrlPics);
 
+        // Does this ali_product_id exist in our Product table?
+        // If no, then it needs to be crawled. $needsCrawl = true
+        // If yes, then check the date of the latest ali review against the current date of latest review by calling $product->needsCrawl
+        
+
+        $needsScrape = true;
+
+        $product = $this->getContainer()
+                            ->get('doctrine')
+                            ->getRepository('AppBundle:Product')
+                            ->findOneBy(
+                                array('ali_product_id'=> $aliProductId)
+                            );
+
+        if ($product){
+
+            if(!$product->needsScrape($dateOfLatestReviewOnAli)){
+
+                $needsScrape = false;
+                $output->writeln("No new reviews with pics to scrape from aliexpress for product $ali_product_id because no new reviews were added since last crawl on".date('d M Y H:i', $product->getDateLastCrawled())."\n\n");
+            
+            } 
+        }
+
+        if(!$needsScrape){
+            $output->writeln("No new reviews with pics to scrape from aliexpress for product $ali_product_id because no new reviews were added since last crawl on".date('d M Y H:i', $product->getDateLastCrawled())."\n\n");
+            return;
+        }
+
+        // Crawl all pages of reviews to get the urls of uploaded imgs
         $userImgs = $this->getImgUrls($feedbackUrl, $numReviewPages);        
         echo "\n\n the 1st 3 pages of img urls contain: ".count($userImgs);
 
-        $this->downloadAllUserImgs($userImgs, $feedbackUrl);
 
-        echo "\n\nwhere are you\n\n";
-        return;
-
-        $aliProductUrl = $input->getArgument('aliProductUrl');
-        $output->writeln("the aliProductUrl is $aliProductUrl \n\n");
-
-        $kernel = $this->getContainer()->get('kernel');
-        $path = $kernel->locateResource('@AppBundle/Command/');
-
-        $feedbackUrl = $path.'/Cached-Urls-for-Testing-Commands/FeedbackUrl';
-
-        $this->getNumReviewPages($feedbackUrl, true);
-
-
-
-        // $feedbackUrl    = $this->getFeedbackUrl($productUrl);
-        // $output->writeln("the ali feedback url is $feedbackUrl \n\n");
-
-// $numReviewPages = $this->getNumReviewPages('http://feedback.aliexpress.com/display/productEvaluation.htm?productId=32322377471&ownerMemberId=220754190&companyId=230737239&memberType=seller&startValidDate=');
-// echo $numReviewPages;
-        // $product = $this->getContainer()
-        //                     ->get('doctrine')
-        //                     ->getRepository('AppBundle:Product')
-        //                     ->findOneBy(
-        //                         array('ali_product_id'=> $aliProductId),
-        //                         array('id'=>'DESC')
-        //                     )
-        //                 ;
-        // $dateOfLatestReviewOnAli = $this->getDateOfLatestReviewOnAli();  
-        
-        // if ($product){
-        //     // still need to crawl to get the $dateOfLatestReviewOnAli param for needsCrawl()
-        //     if(!$product->needsCrawl(strtotime('01 Jan 2016 19:19'))){
-
-        //         $output->writeln("No need to crawl aliexpress for product $ali_product_id because no new reviews were added since last crawl on".date('d M Y H:i', $product->getDateLastCrawled())."\n\n");
-
-        //         return ;
-        //     }
-        // }
-
-        // $output->writeln('start scraping photos for ali product id'.$aliProductId."\n\n");
-
-        // $numReviewPages = $this->getNumReviewPages($feedbackUrl);
-        // $userImgs       = $this->getImgUrls($feedbackUrl, $numReviewPages);
-        // $this->downloadAllUserImgs($userImgs);
-        
+        // Download all userImgs into S3 buckets
+        $output->writeln('start scraping photos for ali product id'.$aliProductId."\n\n");
+        $this->downloadAllUserImgs($userImgs, $feedbackUrl);        
         return;
     }
 
@@ -110,26 +107,13 @@ class GetPhotosCommand extends DoctrineCommand
     * Get product URL from user input then use it to get url for feedback <iframe>
     */
      
-    public function getFeedbackUrl($productUrl, $use_cached_urls = true)
+    public function getFeedbackUrl($productUrl)
     {
         $dom_product = new \DOMDocument();
-
-        if($use_cached_urls){
-           
-            @$dom_product->loadHTMLFile($productUrl);
-
-        } else {
-    
-            $html_string = $this->getWebpage($productUrl);
-            @$dom_product->loadHTML($html_string);
-
-        }
- 
+        $html_string = $this->getWebpage($productUrl);
+        @$dom_product->loadHTML($html_string);
         $domxpath = new \DOMXPath($dom_product);
-        $tagName = 'div';
-        $attrName = 'id';
-
-        $feedback_div_nodelist = $domxpath->query("//$tagName" . '[@' . $attrName . "='feedback']/iframe");
+        $feedback_div_nodelist = $domxpath->query("//div[@id='feedback']/iframe");
 
         foreach ($feedback_div_nodelist as $n) {
              $feedbackUrls[] = $n->getAttribute( 'thesrc' );
@@ -192,9 +176,6 @@ class GetPhotosCommand extends DoctrineCommand
         $dom_feedback = new \DOMDocument();
         @$dom_feedback->loadHTML($html_string);
         $domxpath = new \DOMXPath($dom_feedback);
-
-        $tagName = 'div';
-        $attrName = 'class';
         $review_page_nodelist = $domxpath->query("//div[@class='f-filter-list']/label[1]");
         
         foreach ($review_page_nodelist as $n) {
@@ -227,7 +208,7 @@ class GetPhotosCommand extends DoctrineCommand
         }
 
 
-        return $dateOfLatestReview; //strtotime($dateOfLatestReview);
+        return strtotime($dateOfLatestReview);
     }
 
 
@@ -291,6 +272,46 @@ class GetPhotosCommand extends DoctrineCommand
 
     }
 
+    /*
+    * Get the feedback_id for every review on a page
+    * by grabbing the value attr of <input class="feedback-id">
+    */
+    public function getAliFeedbackIds($html_string)
+    {
+        $ali_feedback_ids = array();
+
+        $dom_feedback = new \DOMDocument();
+        @$dom_feedback->loadHTML($html_string);
+        $domxpath = new \DOMXPath($dom_feedback);
+
+        $results = $domxpath->query("//input[@class='feedback-id']");
+
+        foreach ($results as $result) {
+            $feedback_id = $result->getAttribute( 'value' );
+            $ali_feedback_ids[] = $feedback_id;
+        }
+        
+        return $ali_feedback_ids;
+    }
+
+    public function getAliHelpfulCounts($ali_feedback_ids, $ali_product_id)
+    {
+        $ali_helpful_counts = array();
+
+        $url = 'http://feedback.aliexpress.com/display/DiggShowAjaxService.htm';
+        $fields = array(
+                'evaluation_ids'=> implode(',', $ali_feedback_ids),
+                'product_id'    => $ali_product_id,
+                'from'          => 'detail',
+                'random'        => rand(0,5)/10
+            );
+
+        $json_helpfuls = $this->getWebpage($url, $fields);
+        echo $json_helpfuls;exit;
+        $ali_helpful_counts = json_decode($json_helpfuls);
+
+        return $ali_helpful_counts;
+    }
 
     public function downloadAllUserImgs($userImgs, $feedbackUrl)
     {
