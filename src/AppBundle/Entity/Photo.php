@@ -45,6 +45,14 @@ class Photo
     /**
      * @var integer
      *
+     * @ORM\Column(name="ali_upload_date", type="integer")
+     */
+    private $ali_upload_date;
+
+
+    /**
+     * @var integer
+     *
      * @ORM\Column(name="rating", type="smallint")
      */
     private $rating;
@@ -183,5 +191,29 @@ class Photo
     public function getProduct()
     {
         return $this->product;
+    }
+
+    /**
+     * Set aliUploadDate
+     *
+     * @param integer $aliUploadDate
+     *
+     * @return Photo
+     */
+    public function setAliUploadDate($aliUploadDate)
+    {
+        $this->ali_upload_date = $aliUploadDate;
+
+        return $this;
+    }
+
+    /**
+     * Get aliUploadDate
+     *
+     * @return integer
+     */
+    public function getAliUploadDate()
+    {
+        return $this->ali_upload_date;
     }
 }

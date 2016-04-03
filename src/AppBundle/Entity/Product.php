@@ -96,6 +96,33 @@ class Product
      */
     protected $photos;
 
+    /**
+     * @var integer
+     *
+     * @ORM\Column(name="num_review_pages", type="integer")
+     */
+    private $num_review_pages;
+
+    /**
+     * @var integer
+     *
+     * @ORM\Column(name="num_reviews", type="integer")
+     */
+    private $num_reviews;
+
+    /**
+     * @var integer
+     *
+     * @ORM\Column(name="date_last_crawled", type="integer")
+     */
+    private $date_last_crawled;   
+
+    /**
+     * @var integer
+     *
+     * @ORM\Column(name="date_of_latest_review", type="integer")
+     */
+    private $date_of_latest_review;   
 
     /**
      * Get id
@@ -213,7 +240,7 @@ class Product
      */
     public function setAliSalePrice($aliSalePrice)
     {
-        $this->ali_sale_price = $aliSalePrice;
+        $this->ali_sale_price = round(floatval(substr($aliSalePrice, 4)));
 
         return $this;
     }
@@ -387,5 +414,119 @@ class Product
     public function getPhotos()
     {
         return $this->photos;
+    }
+
+    /**
+     * Set numReviewPages
+     *
+     * @param integer $numReviewPages
+     *
+     * @return Product
+     */
+    public function setNumReviewPages($numReviewPages)
+    {
+        $this->num_review_pages = $numReviewPages;
+
+        return $this;
+    }
+
+    /**
+     * Get numReviewPages
+     *
+     * @return integer
+     */
+    public function getNumReviewPages()
+    {
+        return $this->num_review_pages;
+    }
+
+    /**
+     * Set numReviews
+     *
+     * @param integer $numReviews
+     *
+     * @return Product
+     */
+    public function setNumReviews($numReviews)
+    {
+        $this->num_reviews = $numReviews;
+
+        return $this;
+    }
+
+    /**
+     * Get numReviews
+     *
+     * @return integer
+     */
+    public function getNumReviews()
+    {
+        return $this->num_reviews;
+    }
+
+    /**
+     * Set dateOfLatestReview
+     *
+     * @param integer $dateOfLatestReview
+     *
+     * @return Product
+     */
+    public function setDateOfLatestReview($dateOfLatestReview)
+    {
+        $this->date_of_latest_review = $dateOfLatestReview;
+
+        return $this;
+    }
+
+    /**
+     * Get dateOfLatestReview
+     *
+     * @return integer
+     */
+    public function getDateOfLatestReview()
+    {
+        return $this->date_of_latest_review;
+    }
+
+
+
+    /**
+     * Set dateLastCrawled
+     *
+     * @param integer $dateLastCrawled
+     *
+     * @return Product
+     */
+    public function setDateLastCrawled($dateLastCrawled)
+    {
+        $this->date_last_crawled = $dateLastCrawled;
+
+        return $this;
+    }
+
+    /**
+     * Get dateLastCrawled
+     *
+     * @return integer
+     */
+    public function getDateLastCrawled()
+    {
+        return $this->date_last_crawled;
+    }
+
+    /**
+     * Check if the product has newer reviews on aliexpress.com 
+     * that we haven't yet crawled through 
+     *
+     * @return boolean
+     */
+    public function needsCrawl($dateOfLatestReviewOnAli)
+    {
+        // Is the most recent review uploaded to aliexpress newer than the latest review in the db?
+        // both dates are unix timestamps
+        if($dateOfLatestReviewOnAli < $this->date_of_latest_review)
+            return false;
+
+        return true;
     }
 }

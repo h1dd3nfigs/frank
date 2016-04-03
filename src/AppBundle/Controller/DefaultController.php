@@ -41,36 +41,23 @@ class DefaultController extends Controller
     public function createAction()
     {
         $category = new Category();
-        $category->setName('Bottoms');
+        $category->setName('Apparel Women');
 
         $product = new Product();
-        $product->setAliId('32322377471')
-                ->setAliName('Hot Sale In Stock Women Pencil Pants Skinny Zipper Hollow Out Black White 2015 New Fashion Casual Slim Summer Feminino Trousers')
+        $product->setAliProductId('32322377471')
+                ->setAliProductTitle('Hot Sale In Stock Women Pencil Pants Skinny Zipper Hollow Out Black White 2015 New Fashion Casual Slim Summer Feminino Trousers')
                 ->setCategory($category)
-                ->setUserImgUrls( array(
-                    '/userImgs/aliproductId-32322377471/32322377471-img0.jpg',
-                    '/userImgs/aliproductId-32322377471/32322377471-img1.jpg',
-                    '/userImgs/aliproductId-32322377471/32322377471-img2.jpg',
-                    '/userImgs/aliproductId-32322377471/32322377471-img3.jpg',
-                    '/userImgs/aliproductId-32322377471/32322377471-img4.jpg',
-                    '/userImgs/aliproductId-32322377471/32322377471-img5.jpg',
-                    '/userImgs/aliproductId-32322377471/32322377471-img6.jpg',
-                    '/userImgs/aliproductId-32322377471/32322377471-img7.jpg',
-                    '/userImgs/aliproductId-32322377471/32322377471-img8.jpg',
-                    '/userImgs/aliproductId-32322377471/32322377471-img9.jpg',
-                    '/userImgs/aliproductId-32322377471/32322377471-img10.jpg',
-                    '/userImgs/aliproductId-32322377471/32322377471-img11.jpg',
-                    '/userImgs/aliproductId-32322377471/32322377471-img12.jpg',
-                    '/userImgs/aliproductId-32322377471/32322377471-img13.jpg',
-                    '/userImgs/aliproductId-32322377471/32322377471-img14.jpg',
-                    '/userImgs/aliproductId-32322377471/32322377471-img15.jpg',
-                    '/userImgs/aliproductId-32322377471/32322377471-img16.jpg',
-                    '/userImgs/aliproductId-32322377471/32322377471-img17.jpg',
-                    '/userImgs/aliproductId-32322377471/32322377471-img18.jpg',
-                    '/userImgs/aliproductId-32322377471/32322377471-img19.jpg',
-                    '/userImgs/aliproductId-32322377471/32322377471-img20.jpg',
-                    '/userImgs/aliproductId-32322377471/32322377471-img21.jpg',
-                ));
+                ->setAliProductUrl('productUrl')
+                ->setAliSalePrice('US $11.17') // Must change model to make column type=smallint, convert str to int price format, e.g. from 'US $11.17' to 11
+                ->setAli30DaysCommission('30daysCommission')
+                ->setAliVolume('volume')
+                ->setAliCategoryId('3')
+                ->setAliAffiliateUrl('promotionUrl')
+                ->setNumReviews('44')
+                ->setNumReviewPages('4')
+                ->setDateOfLatestReview(strtotime('07 Jan 2016 19:19'))
+                ->setDateLastCrawled(strtotime('01 Jan 2016 00:19'))
+            ;;
         
         $em = $this->getDoctrine()->getManager();
         $em->persist($product);
@@ -110,6 +97,27 @@ class DefaultController extends Controller
                             )
                         );
         // return new Response('<a href="/list">Back to Home</a><br><br>Showing product id '.$product->getId().'<br><br>'.$product->getAliName().'<br><br>'.$imgs_string);
+    }
+
+    /**
+     * @Route("/needscrawl/{id}", name="needscrawl")
+     */
+    public function needscrawlAction($id)
+    {
+        $product = $this->getDoctrine()
+                        ->getRepository('AppBundle:Product')
+                        ->find($id)
+                    ;
+
+        if (!$product) {
+            throw $this->createNotFoundException(
+                'No product found for id '.$id
+            );
+        }
+        
+        $needsCrawl = $product->needsCrawl(strtotime('06 Jan 2016 19:19'));
+
+        return new Response("<p>Does product # $id need to be crawled?</p><br><br><h2>Answer: $needsCrawl</h2>");
     }
 
     /**
