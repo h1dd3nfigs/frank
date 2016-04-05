@@ -47,11 +47,15 @@ class GetPhotosCommand extends DoctrineCommand
      
         $htmlStringFeedbackUrlPics = $this->getFeedbackUrlWithOnlyPics($feedbackUrl);
         
-        $ali_feedback_ids = $this->getAliFeedbackIds($htmlStringFeedbackUrlPics);
-        // var_dump($ali_feedback_ids);exit;
+        $feedbacks = $this->getFeedbackBody($feedbackUrl);
         $ali_product_id = $this->getAliProductIdFromFeedbackUrl($feedbackUrl);
         
-        $this->getAliHelpfulCounts($ali_feedback_ids, $ali_product_id);
+        $feedbacks = $this->getAliHelpfulCounts($ali_product_id, $feedbacks);
+        // print_r($feedbacks);
+        echo "\n\ndid it all work?\n\n";
+        return;
+        $ali_feedback_ids = $this->getAliFeedbackIds($htmlStringFeedbackUrlPics);
+        // var_dump($ali_feedback_ids);exit;
         return;
 
         echo "\n\nnum review pages with pics only: ";
@@ -154,7 +158,6 @@ class GetPhotosCommand extends DoctrineCommand
     {
         $dom_feedback = new \DOMDocument();    
         @$dom_feedback->loadHTML($html_string);
-
         $domxpath = new \DOMXPath($dom_feedback);
         $review_page_nodelist = $domxpath->query("//div[contains(concat(' ',@class,' '),' ui-pagination ')]/label[@class='ui-label']");
 
@@ -167,6 +170,89 @@ class GetPhotosCommand extends DoctrineCommand
         return $numReviewPages;
     }
  
+     /*
+    * Get all the feedback_ids, upload_dates, and urls for user images on each page of reviews
+    * 
+    */
+
+    public function getFeedbackBody($feedbackUrl, $numReviewPages = 1)
+    {
+        $feedbacks = array();
+
+
+        // for ($i=1; $i <= $numReviewPages ; $i++) { 
+        for ($i=1; $i <= 3 ; $i++) { 
+            echo "\n\nreview page $i\n";
+             $fields = array(
+                        'evaSortValue' => 'sortlarest@feedback',
+                        'withPictures' => 'true',
+                        'page'         => $i,
+                        
+                     );
+
+            $html_string = $this->getWebpage($feedbackUrl, $fields);
+
+            $domname = 'dom_feedback'.$i;
+
+            $$domname = new \DOMDocument();
+            @$$domname->loadHTML($html_string);
+
+            $domxpathname = 'domxpath'.$i;
+            $$domxpathname = new \DOMXPath($$domname);
+            $review_page_nodelist = $$domxpathname->query("//div[@class='fb-main']");
+
+
+        // $dom_feedback = new \DOMDocument();    
+        // @$dom_feedback->loadHTML($html_string);
+        // $domxpath = new \DOMXPath($dom_feedback);
+        // $review_page_nodelist = $domxpath->query("//div[@class='fb-main']");
+
+            foreach ($review_page_nodelist as $n) {
+                echo "\n\nnew feedback body\n\n";
+
+                $input = $$domxpathname->query($n->getNodePath()."/div[@class='f-rate-info']/input[@class='feedback-id']");            
+                foreach ($input as $node) {
+                    $ali_feedback_id = $node->getAttribute( 'value' );
+                }
+
+                $date = $$domxpathname->query($n->getNodePath()."/div[@class='f-content']/dl[@class='buyer-review']/dd[@class='r-time']");
+                foreach ($date as $node) {
+                    $ali_upload_date = $node->nodeValue;
+                }
+
+                $userImgs = array();
+                $imgs = $$domxpathname->query($n->getNodePath()."/div[@class='f-content']/dl[@class='buyer-review']/dd[@class='r-photo-list']/ul[@class='util-clearfix']/li[@class='pic-view-item']");
+                foreach ($imgs as $node) {
+                    $userImg = $node->getAttribute( 'data-src' );
+                    $userImgs[] = $userImg;
+                }
+                
+                $feedbacks[$ali_feedback_id] = array(
+                                                    'ali_upload_date'   => $ali_upload_date,
+                                                    'ali_helpful_count' => 0,
+                                                    'userImgs'          => $userImgs,
+                                                );
+            }
+
+            // print_r($feedbacks);
+
+        }
+
+        // print_r($feedbacks);
+
+                    /*
+            * UNCOMMENT DELAY BEFORE RUNNING SCRAPER AGAINST LIVE SITE FOR MULTIPLE PRODUCTS
+            */
+            // $delay = 4; //in seconds, to rate limit my requests
+            // echo "Delaying for $delay seconds between each feedback page's request\n\n";
+            // sleep($delay);
+
+        return $feedbacks;
+    }
+ 
+ 
+
+
     /*
     * Get total number of reviews uploaded that have pics
     * Example: from <div class="f-filter-list"><em>{numReviews}</em> 
@@ -264,53 +350,61 @@ class GetPhotosCommand extends DoctrineCommand
 
     }
 
-    public function createAliProductUrl($aliProductId)
-    {
-        $aliProductUrl = 'http://www.aliexpress.com/item//'.$aliProductId.'.html';
+    // public function createAliProductUrl($aliProductId)
+    // {
+    //     $aliProductUrl = 'http://www.aliexpress.com/item//'.$aliProductId.'.html';
 
-        return $aliProductUrl;
+    //     return $aliProductUrl;
 
-    }
+    // }
 
     /*
     * Get the feedback_id for every review on a page
     * by grabbing the value attr of <input class="feedback-id">
     */
-    public function getAliFeedbackIds($html_string)
-    {
-        $ali_feedback_ids = array();
+    // public function getAliFeedbackIds($html_string)
+    // {
+    //     $ali_feedback_ids = array();
 
-        $dom_feedback = new \DOMDocument();
-        @$dom_feedback->loadHTML($html_string);
-        $domxpath = new \DOMXPath($dom_feedback);
+    //     $dom_feedback = new \DOMDocument();
+    //     @$dom_feedback->loadHTML($html_string);
+    //     $domxpath = new \DOMXPath($dom_feedback);
 
-        $results = $domxpath->query("//input[@class='feedback-id']");
+    //     $results = $domxpath->query("//input[@class='feedback-id']");
 
-        foreach ($results as $result) {
-            $feedback_id = $result->getAttribute( 'value' );
-            $ali_feedback_ids[] = $feedback_id;
-        }
+    //     foreach ($results as $result) {
+    //         $feedback_id = $result->getAttribute( 'value' );
+    //         $ali_feedback_ids[] = $feedback_id;
+    //     }
         
-        return $ali_feedback_ids;
-    }
+    //     return $ali_feedback_ids;
+    // }
 
-    public function getAliHelpfulCounts($ali_feedback_ids, $ali_product_id)
+    public function getAliHelpfulCounts($ali_product_id, $feedbacks)
     {
-        $ali_helpful_counts = array();
+        // Ajax Service can only take 10 feedback_ids at a time
+        $ali_feedback_ids = array_chunk(array_keys($feedbacks), 10);
 
-        $url = 'http://feedback.aliexpress.com/display/DiggShowAjaxService.htm';
-        $fields = array(
-                'evaluation_ids'=> implode(',', $ali_feedback_ids),
-                'product_id'    => $ali_product_id,
-                'from'          => 'detail',
-                'random'        => rand(0,5)/10
-            );
+        foreach ($ali_feedback_ids as $ids) {
 
-        $json_helpfuls = $this->getWebpage($url, $fields);
-        echo $json_helpfuls;exit;
-        $ali_helpful_counts = json_decode($json_helpfuls);
+            $url = 'http://feedback.aliexpress.com/display/DiggShowAjaxService.htm';
+            $fields = array(
+                    'evaluation_ids'=> implode(',', $ids),
+                    'product_id'    => $ali_product_id,
+                    'from'          => 'detail',
+                    'random'        => rand(0,5)/10
+                );
 
-        return $ali_helpful_counts;
+            $json = $this->getWebpage($url, $fields);
+            // echo $json;exit;
+            $helpful_counts = json_decode($json,true);
+
+            foreach($helpful_counts['result'] as $id => $data){
+                $feedbacks[$id]['ali_helpful_count'] = $data['useful']; 
+            }
+        }
+        print_r($feedbacks);
+        return $feedbacks;
     }
 
     public function downloadAllUserImgs($userImgs, $feedbackUrl)
@@ -437,7 +531,7 @@ class GetPhotosCommand extends DoctrineCommand
         $ch = curl_init();
 
         curl_setopt ($ch, CURLOPT_URL, $url);
-        curl_setopt ($ch, CURLOPT_HEADER, true);
+        // curl_setopt ($ch, CURLOPT_HEADER, true);
         curl_setopt ($ch, CURLOPT_USERAGENT, 'Frank/0.1 http://frank.elxr.it/bot.html');
 
         // send HTTP POST with parameters
