@@ -46,8 +46,11 @@ class GetPhotosCommand extends DoctrineCommand
         $feedbackUrl = $this->getFeedbackUrl($productUrl);
      
         $htmlStringFeedbackUrlPics = $this->getFeedbackUrlWithOnlyPics($feedbackUrl);
+
+        echo "\n\nnum review pages with pics only: ";
+        echo $numReviewPages = $this->getNumReviewPages($htmlStringFeedbackUrlPics);
         
-        $feedbacks = $this->getFeedbackBody($feedbackUrl);
+        $feedbacks = $this->getFeedbackBody($feedbackUrl, $numReviewPages);
         $ali_product_id = $this->getAliProductIdFromFeedbackUrl($feedbackUrl);
         
         $feedbacks = $this->getAliHelpfulCounts($ali_product_id, $feedbacks);
@@ -58,8 +61,6 @@ class GetPhotosCommand extends DoctrineCommand
         // var_dump($ali_feedback_ids);exit;
         return;
 
-        echo "\n\nnum review pages with pics only: ";
-        echo $numReviewPages = $this->getNumReviewPages($htmlStringFeedbackUrlPics);
         
         echo "\n\nnum reviews with pics: ";
         echo $numReviewsWithPics = $this->getNumReviews($htmlStringFeedbackUrlPics);
@@ -68,8 +69,8 @@ class GetPhotosCommand extends DoctrineCommand
         echo $dateOfLatestReviewOnAli = $this->getDateOfLatestReviewOnAli($htmlStringFeedbackUrlPics);
 
         // Does this ali_product_id exist in our Product table?
-        // If no, then it needs to be crawled. $needsCrawl = true
-        // If yes, then check the date of the latest ali review against the current date of latest review by calling $product->needsCrawl
+        // If no, then it needs to be crawled & scraped. $needsScrape = true
+        // If yes, then check the date of the latest ali review against the current date of latest review by calling $product->needsScrape
         
 
         $needsScrape = true;
@@ -81,25 +82,17 @@ class GetPhotosCommand extends DoctrineCommand
                                 array('ali_product_id'=> $aliProductId)
                             );
 
-        if ($product){
-
-            if(!$product->needsScrape($dateOfLatestReviewOnAli)){
-
-                $needsScrape = false;
-                $output->writeln("No new reviews with pics to scrape from aliexpress for product $ali_product_id because no new reviews were added since last crawl on".date('d M Y H:i', $product->getDateLastCrawled())."\n\n");
-            
-            } 
-        }
+        if ($product)
+            $needsScrape = $product->needsScrape($dateOfLatestReviewOnAli)? true : false;
 
         if(!$needsScrape){
             $output->writeln("No new reviews with pics to scrape from aliexpress for product $ali_product_id because no new reviews were added since last crawl on".date('d M Y H:i', $product->getDateLastCrawled())."\n\n");
             return;
         }
 
-        // Crawl all pages of reviews to get the urls of uploaded imgs
-        $userImgs = $this->getImgUrls($feedbackUrl, $numReviewPages);        
-        echo "\n\n the 1st 3 pages of img urls contain: ".count($userImgs);
-
+        /*
+        * EXTRACT userImgs from that $feedbacks array to supply as param to downloadAllUserImgs()
+        */
 
         // Download all userImgs into S3 buckets
         $output->writeln('start scraping photos for ali product id'.$aliProductId."\n\n");
@@ -179,10 +172,8 @@ class GetPhotosCommand extends DoctrineCommand
     {
         $feedbacks = array();
 
-
-        // for ($i=1; $i <= $numReviewPages ; $i++) { 
-        for ($i=1; $i <= 3 ; $i++) { 
-            echo "\n\nreview page $i\n";
+        // Iterate through each page of reviews
+        for ($i=1; $i <= $numReviewPages ; $i++) { 
              $fields = array(
                         'evaSortValue' => 'sortlarest@feedback',
                         'withPictures' => 'true',
@@ -190,6 +181,7 @@ class GetPhotosCommand extends DoctrineCommand
                         
                      );
 
+            // Load the html doc for the i-th page of reviews into a string
             $html_string = $this->getWebpage($feedbackUrl, $fields);
 
             $domname = 'dom_feedback'.$i;
@@ -199,27 +191,26 @@ class GetPhotosCommand extends DoctrineCommand
 
             $domxpathname = 'domxpath'.$i;
             $$domxpathname = new \DOMXPath($$domname);
+
+            // Locate the parent div for each review on this pege
             $review_page_nodelist = $$domxpathname->query("//div[@class='fb-main']");
 
-
-        // $dom_feedback = new \DOMDocument();    
-        // @$dom_feedback->loadHTML($html_string);
-        // $domxpath = new \DOMXPath($dom_feedback);
-        // $review_page_nodelist = $domxpath->query("//div[@class='fb-main']");
-
+            // Iterate through each review's parent div to get the feedback_id, upload_date and imgs
             foreach ($review_page_nodelist as $n) {
-                echo "\n\nnew feedback body\n\n";
-
+                
+                // Get the feedback_id, unique to each review
                 $input = $$domxpathname->query($n->getNodePath()."/div[@class='f-rate-info']/input[@class='feedback-id']");            
                 foreach ($input as $node) {
                     $ali_feedback_id = $node->getAttribute( 'value' );
                 }
 
+                // Get the date this review was posted
                 $date = $$domxpathname->query($n->getNodePath()."/div[@class='f-content']/dl[@class='buyer-review']/dd[@class='r-time']");
                 foreach ($date as $node) {
                     $ali_upload_date = $node->nodeValue;
                 }
 
+                // Get the user-uploaded images
                 $userImgs = array();
                 $imgs = $$domxpathname->query($n->getNodePath()."/div[@class='f-content']/dl[@class='buyer-review']/dd[@class='r-photo-list']/ul[@class='util-clearfix']/li[@class='pic-view-item']");
                 foreach ($imgs as $node) {
@@ -227,25 +218,20 @@ class GetPhotosCommand extends DoctrineCommand
                     $userImgs[] = $userImg;
                 }
                 
+                // Load the elements of each review into this output array
                 $feedbacks[$ali_feedback_id] = array(
                                                     'ali_upload_date'   => $ali_upload_date,
                                                     'ali_helpful_count' => 0,
                                                     'userImgs'          => $userImgs,
                                                 );
             }
-
-            // print_r($feedbacks);
-
         }
-
-        // print_r($feedbacks);
-
-                    /*
+            /*
             * UNCOMMENT DELAY BEFORE RUNNING SCRAPER AGAINST LIVE SITE FOR MULTIPLE PRODUCTS
             */
-            // $delay = 4; //in seconds, to rate limit my requests
-            // echo "Delaying for $delay seconds between each feedback page's request\n\n";
-            // sleep($delay);
+            $delay = 5; //in seconds, to rate limit my requests
+            echo "Delaying for $delay seconds between each feedback page's request\n\n";
+            sleep($delay);
 
         return $feedbacks;
     }
@@ -298,50 +284,6 @@ class GetPhotosCommand extends DoctrineCommand
     }
 
 
-    /*
-    * Loop through get_img_urls for each page of feedback
-    * Grab any user-uploaded pics from <li class="pic-view-item" data-src="{imgUrl}">
-    */
-
-    public function getImgUrls($feedbackUrl, $numReviewPages)
-    {        
-        // for ($i=1; $i <= $numReviewPages ; $i++) { 
-        for ($i=1; $i <= 3 ; $i++) { 
-             $fields = array(
-                        'evaSortValue' => 'sortlarest@feedback',
-                        'withPictures' => 'true',
-                        'page'         => $i,
-                        
-                     );
-
-            $html_string = $this->getWebpage($feedbackUrl, $fields);
-
-            $domname = 'dom_feedback'.$i;
-
-            $$domname = new \DOMDocument();
-            @$$domname->loadHTML($html_string);
-
-            $domxpathname = 'domxpath'.$i;
-            $$domxpathname = new \DOMXPath($$domname);
-            $results = $$domxpathname->query("//li[@class='pic-view-item']");
-
-            foreach ($results as $node) {
-                $userImg = $node->getAttribute( 'data-src' );
-                $userImgs[] = $userImg;
-            }
-
-            /*
-            * UNCOMMENT DELAY BEFORE RUNNING SCRAPER AGAINST LIVE SITE FOR MULTIPLE PRODUCTS
-            */
-            // $delay = 4; //in seconds, to rate limit my requests
-            // echo "Delaying for $delay seconds between each feedback page's request\n\n";
-            // sleep($delay);
-
-        }
-
-        return $userImgs ;
-    }
-
     public function getAliProductIdFromFeedbackUrl($feedbackUrl)
     {
         parse_str( parse_url( $feedbackUrl, PHP_URL_QUERY));
@@ -350,35 +292,6 @@ class GetPhotosCommand extends DoctrineCommand
 
     }
 
-    // public function createAliProductUrl($aliProductId)
-    // {
-    //     $aliProductUrl = 'http://www.aliexpress.com/item//'.$aliProductId.'.html';
-
-    //     return $aliProductUrl;
-
-    // }
-
-    /*
-    * Get the feedback_id for every review on a page
-    * by grabbing the value attr of <input class="feedback-id">
-    */
-    // public function getAliFeedbackIds($html_string)
-    // {
-    //     $ali_feedback_ids = array();
-
-    //     $dom_feedback = new \DOMDocument();
-    //     @$dom_feedback->loadHTML($html_string);
-    //     $domxpath = new \DOMXPath($dom_feedback);
-
-    //     $results = $domxpath->query("//input[@class='feedback-id']");
-
-    //     foreach ($results as $result) {
-    //         $feedback_id = $result->getAttribute( 'value' );
-    //         $ali_feedback_ids[] = $feedback_id;
-    //     }
-        
-    //     return $ali_feedback_ids;
-    // }
 
     public function getAliHelpfulCounts($ali_product_id, $feedbacks)
     {
@@ -396,14 +309,12 @@ class GetPhotosCommand extends DoctrineCommand
                 );
 
             $json = $this->getWebpage($url, $fields);
-            // echo $json;exit;
             $helpful_counts = json_decode($json,true);
 
             foreach($helpful_counts['result'] as $id => $data){
                 $feedbacks[$id]['ali_helpful_count'] = $data['useful']; 
             }
         }
-        print_r($feedbacks);
         return $feedbacks;
     }
 
