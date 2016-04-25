@@ -44,17 +44,17 @@ class DefaultController extends Controller
         $category->setName('Apparel Women');
 
         $product = new Product();
-        $product->setAliProductId('32322377471')
-                ->setAliProductTitle('Hot Sale In Stock Women Pencil Pants Skinny Zipper Hollow Out Black White 2015 New Fashion Casual Slim Summer Feminino Trousers')
+        $product->setAliProductId('32251240493')
+                ->setAliProductTitle('DL vestido de renda 2016 Navy Lace Satin Patchwork Party Maxi Dress LC6809 dress party evening elegant vestido longo festa noite')
                 ->setCategory($category)
                 ->setAliProductUrl('productUrl')
-                ->setAliSalePrice('US $11.17') // Must change model to make column type=smallint, convert str to int price format, e.g. from 'US $11.17' to 11
+                ->setAliSalePrice('US $16.99') // Must change model to make column type=smallint, convert str to int price format, e.g. from 'US $11.17' to 11
                 ->setAli30DaysCommission('30daysCommission')
                 ->setAliVolume('volume')
                 ->setAliCategoryId('3')
                 ->setAliAffiliateUrl('promotionUrl')
-                ->setNumReviews('44')
-                ->setNumReviewPages('4')
+                ->setNumReviews('92')
+                ->setNumReviewPages('10')
                 ->setDateOfLatestReview(strtotime('07 Jan 2016 19:19'))
                 ->setDateLastCrawled(strtotime('01 Jan 2016 00:19'))
             ;;
@@ -84,19 +84,30 @@ class DefaultController extends Controller
             );
         }
         
-        $photos = $product->getPhotos();
 
-        // $imgs_string = '';
-        // foreach ($product->getUserImgUrls() as $url) {
-        //     $imgs_string .= '<img src="'.$url.'"><br>';
-        // }
+        $query = $this->getDoctrine()->getManager()
+                ->createQuery(
+                   'SELECT ph, p 
+                    FROM AppBundle:Photo ph 
+                    JOIN ph.product p 
+                    WHERE p.id = :id 
+                    ORDER BY ph.aliHelpfulCount DESC, ph.id DESC'
+                )
+                ->setParameter('id', $id);
+
+
+        try {
+            $photos = $query->getResult();
+        } catch (\Doctrine\ORM\NoResultException $e) {
+            return $e->getMessage();
+        }
+
         return $this->render('product/product_show.html.twig', 
                             array(
                                 'product' => $product,
                                 'photos'=> $photos,
                             )
                         );
-        // return new Response('<a href="/list">Back to Home</a><br><br>Showing product id '.$product->getId().'<br><br>'.$product->getAliName().'<br><br>'.$imgs_string);
     }
 
     /**
@@ -173,6 +184,20 @@ class DefaultController extends Controller
     
     }
 
+    /**
+     * @Route("/truncatetable/{table_name}", name="truncate")
+     */
+    // public function truncatetableAction($table_name)
+    // {
+    //     $em = $this->getDoctrine()->getManager();
 
+    //     $connection = $em->getConnection();
+    //     $platform   = $connection->getDatabasePlatform();
+
+    //     $connection->executeUpdate($platform->getTruncateTableSQL($table_name, true /* whether to cascade */));
+    //     // Shortcut method to delete all rows from the given table
+    //     return new Response('Truncated the table '.$table_name);
+    
+    // }
 
 }

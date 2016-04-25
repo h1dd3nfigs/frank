@@ -2,7 +2,6 @@
 namespace AppBundle\Command;
 
 use Doctrine\Bundle\DoctrineBundle\Command\DoctrineCommand;
-//use Symfony\Bundle\FrameworkBundle\Command\ContainerAwareCommand;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
@@ -24,7 +23,96 @@ class GetProductsCommand extends DoctrineCommand
 
     protected function execute(InputInterface $input, OutputInterface $output)
     {
+        // use api parameters from a settings file
+
+        // Make api call to get list of products 
+        $products = $this->getListPromotionProducts();
+
+        $productUrls = $this->array_value_recursive('productUrl', $products);
+
+       // Make api call to get the affiliate url for each product
+        $affiliateUrls = $this->getPromotionLinks($productUrls);    
         
+        /*
+        * Store product feed in db 
+        */
+
+        // $category = new Category();
+        // $category->setName('Apparel');
+
+        $category = $this->getContainer()->get('doctrine')
+                                        ->getRepository('AppBundle:Category')
+                                        ->find(1);
+
+        foreach ($products as $key => $p) {
+           
+            $product = new Product();
+            $product
+                    ->setCategory($category)
+                    ->setAliProductId($p['productId'])
+                    ->setAliProductTitle($p['productTitle'])
+                    ->setAliProductUrl($p['productUrl'])
+                    ->setAliSalePrice(round(floatval(substr($p['salePrice'], 4)))) // Must change model to make column type=smallint, convert str to int price format, e.g. from 'US $11.17' to 11
+                    ->setAli30DaysCommission($p['30daysCommission'])
+                    ->setAliVolume($p['volume'])
+                    ->setAliCategoryId($options['categoryId'])
+                    ->setAliAffiliateUrl($affiliateUrls[$key]['promotionUrl'])
+            ;
+
+            $em = $this->getEntityManager('default');
+            $em->persist($product);
+            $em->persist($category);
+            $em->flush();
+
+            // $output->writeln($p['productTitle']);
+        }
+        echo 'just sent '.count($products).' products to the db'."\n\n";
+
+        // call get:photos command for each photo to see scrape pics from ali site
+        
+    }
+
+    private function buildRequestUrl($apiName, $options = array(), $productId = '', $urls = array())
+    {
+        $data = array(
+                    'domain'    =>'http://gw.api.alibaba.com/openapi',
+                    'format'    =>'param2',
+                    'version'   => 2,
+                    'namespace' =>'portals.open',
+            );
+
+        $hostname = implode('/', $data);
+        $endpoint = $apiName.'/'.API_KEY.'?'.urldecode(http_build_query($options));
+
+        return $requestUrl = $hostname.'/'.$endpoint;
+    }
+
+    private function sendRequest($requestUrl)
+    {
+        $buzz = $this->getContainer()->get('buzz');
+        
+        $response = $buzz->get($requestUrl);
+
+        return $feed = $response->getContent();
+    }
+
+    private function array_value_recursive($key, array $arr){
+        
+        $val = array();
+        array_walk_recursive($arr, function($v, $k) use($key, &$val){
+            if($k == $key) array_push($val, $v);
+        });
+        
+        return count($val) > 1 ? $val : array_pop($val);
+    }
+
+    /**
+    * Call the aliexpress api to retrieve a list of products and their details 
+    *
+    * @return array $products
+    */
+    private function getListPromotionProducts()
+    {
         /*
         * Parameters for api call 
         */
@@ -88,7 +176,19 @@ class GetProductsCommand extends DoctrineCommand
                 echo 'products array size is '.count($products)."\n\n";
             }
         }
+        return $products;
+    }
 
+    /**
+    * Call the aliexpress api to retrieve a list of affiliate urls for the given aliProductUrls
+    *
+    * @return array $affiliateUrls
+    */
+    private function getPromotionLinks($productUrls)
+    {
+        
+        // call getPromotionLinks api for 50 urls at a time because of api limit
+        // array_chunk(input, size)
 
         /*
         * Make api call to get affiliate url for each product
@@ -102,11 +202,7 @@ class GetProductsCommand extends DoctrineCommand
                         'promotionUrl',
                         );
 
-        $productUrls = $this->array_value_recursive('productUrl', $products);
-
-
         $options1 = array(
-            //'productId'       => '1750047098',
             'trackingId'    => TRACKING_ID,
             'fields'            => implode(',', $fields_to_return1),
             'urls'          => implode(',', $productUrls),
@@ -121,84 +217,25 @@ class GetProductsCommand extends DoctrineCommand
         $jsonFeed3 = $this->sendRequest($requestUrl1);
         $affiliateUrls = json_decode($jsonFeed3, true)['result']['promotionUrls'];
 
-        /*
-        * call getPromotionLinks api for 50 urls at a time because of api limit
-        */
-
-
-        // Code here
-
-
-
-
-        /*
-        * Store product feed in db 
-        */
-
-        // $category = new Category();
-        // $category->setName('Apparel');
-
-        $category = $this->getContainer()->get('doctrine')
-                                        ->getRepository('AppBundle:Category')
-                                        ->find(1);
-
-        foreach ($products as $key => $p) {
-           
-            $product = new Product();
-            $product
-                    ->setCategory($category)
-                    ->setAliProductId($p['productId'])
-                    ->setAliProductTitle($p['productTitle'])
-                    ->setAliProductUrl($p['productUrl'])
-                    ->setAliSalePrice(round(floatval(substr($p['salePrice'], 4)))) // Must change model to make column type=smallint, convert str to int price format, e.g. from 'US $11.17' to 11
-                    ->setAli30DaysCommission($p['30daysCommission'])
-                    ->setAliVolume($p['volume'])
-                    ->setAliCategoryId($options['categoryId'])
-                    ->setAliAffiliateUrl($affiliateUrls[$key]['promotionUrl'])
-            ;
-
-            $em = $this->getEntityManager('default');
-            $em->persist($product);
-            $em->persist($category);
-            $em->flush();
-
-            // $output->writeln($p['productTitle']);
-        }
-        echo 'just sent '.count($products).' products to the db'."\n\n";
+        return $affiliateUrls;
     }
 
-    private function buildRequestUrl($apiName, $options = array(), $productId = '', $urls = array())
+    /*
+    * Call the get:photos command to scrape user-uploaded pics for the product
+    */
+    private function getphotos($aliProductUrl, $aliProductId)
     {
-        $data = array(
-                    'domain'    =>'http://gw.api.alibaba.com/openapi',
-                    'format'    =>'param2',
-                    'version'   => 2,
-                    'namespace' =>'portals.open',
-            );
+        $command = $this->getApplication()->find('get:photos');
 
-        $hostname = implode('/', $data);
-        $endpoint = $apiName.'/'.API_KEY.'?'.urldecode(http_build_query($options));
+        $arguments = array(
+            'command' => 'get:photos',
+            'aliProductUrl' => $aliProductUrl,
+            'aliProductId'  => $aliProductId,
+        );
 
-        return $requestUrl = $hostname.'/'.$endpoint;
-    }
+        $getPhotosInput = new ArrayInput($arguments);
+        $returnCode = $command->run($getPhotosInput, $output);
 
-    private function sendRequest($requestUrl)
-    {
-        $buzz = $this->getContainer()->get('buzz');
-        
-        $response = $buzz->get($requestUrl);
-
-        return $feed = $response->getContent();
-    }
-
-    private function array_value_recursive($key, array $arr){
-        
-        $val = array();
-        array_walk_recursive($arr, function($v, $k) use($key, &$val){
-            if($k == $key) array_push($val, $v);
-        });
-        
-        return count($val) > 1 ? $val : array_pop($val);
     }
 
 }

@@ -2,7 +2,6 @@
 namespace AppBundle\Command;
 
 use Doctrine\Bundle\DoctrineBundle\Command\DoctrineCommand;
-// use Symfony\Bundle\FrameworkBundle\Command\ContainerAwareCommand;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
@@ -13,18 +12,33 @@ use Aws\S3\S3Client;
 
 include('aws-settings.php');
 
+// ???????????????
+// IF THIS COMMAND IS CALLED BY get:products command, either
+// 1) RETURN data that should be inserted into db for this product, like numReviews (with pics only), date of latest review, date last crawled, etc
+//  2) FROM WITHIN THIS COMMAND, insert aforementioned data into the db's product table
+// ???????????????
+
 class GetPhotosCommand extends DoctrineCommand
 {
+    /*
+    * The product for which we're seeking user-uploaded photos
+    */ 
+    // protected $product;
 
     protected function configure()
     {
         $this
             ->setName('get:photos')
-            ->setDescription('Scrape photos of users wearing products bought from aliexpress.com')
+            ->setDescription('For the given AliExpress product URL, scrape photos of users wearing the item')
             ->addArgument(
                 'aliProductUrl',
-                InputArgument::OPTIONAL,
-                'Provide the url for the product you\'d like see user photos of.'
+                InputArgument::REQUIRED,
+                'Provide the url for the product whose user photos you\'d like to see.'
+            )
+            ->addArgument(
+                'aliProductId',
+                InputArgument::REQUIRED,
+                'Provide the aliproductId for the product whose user photos you\'d like to see.'
             )
         ;
         
@@ -33,48 +47,11 @@ class GetPhotosCommand extends DoctrineCommand
 
     protected function execute(InputInterface $input, OutputInterface $output)
     {
-        // blue lace dress
-        // $productUrl ='http://www.aliexpress.com/item/Navy-Lace-Satin-Patchwork-Party-Maxi-Dress-LC6809/32251240493.html';
-        // $feedbackUrl = 'http://feedback.aliexpress.com/display/productEvaluation.htm?productId=32251240493&ownerMemberId=200009299&companyId=200001989&memberType=seller&startValidDate=';
-
-
-        // skinny white pants
-        // $productUrl = 'http://www.aliexpress.com/item/Hot-Sale-Women-Pencil-Pants-Skinny-Zipper-Hollow-Out-Black-White-2015-New-Fashion-Casual-Slim/32322377471.html';
-        $productUrl = $input->getArgument('aliProductUrl');
-        $output->writeln("the aliProductUrl is $productUrl \n\n");
-        // $feedbackUrl = 'feedback.aliexpress.com/display/productEvaluation.htm?productId=32322377471&ownerMemberId=220754190&companyId=230737239&memberType=seller&startValidDate=';
-        $feedbackUrl = $this->getFeedbackUrl($productUrl);
-     
-        $htmlStringFeedbackUrlPics = $this->getFeedbackUrlWithOnlyPics($feedbackUrl);
-
-        echo "\n\nnum review pages with pics only: ";
-        echo $numReviewPages = $this->getNumReviewPages($htmlStringFeedbackUrlPics);
-        
-        $feedbacks = $this->getFeedbackBody($feedbackUrl, $numReviewPages);
-        $ali_product_id = $this->getAliProductIdFromFeedbackUrl($feedbackUrl);
-        
-        $feedbacks = $this->getAliHelpfulCounts($ali_product_id, $feedbacks);
-        // print_r($feedbacks);
-        echo "\n\ndid it all work?\n\n";
-        return;
-        $ali_feedback_ids = $this->getAliFeedbackIds($htmlStringFeedbackUrlPics);
-        // var_dump($ali_feedback_ids);exit;
-        return;
-
-        
-        echo "\n\nnum reviews with pics: ";
-        echo $numReviewsWithPics = $this->getNumReviews($htmlStringFeedbackUrlPics);
-        
-        echo "\n\ndate of the latest review: ";
-        echo $dateOfLatestReviewOnAli = $this->getDateOfLatestReviewOnAli($htmlStringFeedbackUrlPics);
-
-        // Does this ali_product_id exist in our Product table?
-        // If no, then it needs to be crawled & scraped. $needsScrape = true
-        // If yes, then check the date of the latest ali review against the current date of latest review by calling $product->needsScrape
-        
-
+        $aliProductUrl = $input->getArgument('aliProductUrl');
+        $aliProductId = $input->getArgument('aliProductId');        
         $needsScrape = true;
 
+        // Does this ali_product_id exist in our Product table? 
         $product = $this->getContainer()
                             ->get('doctrine')
                             ->getRepository('AppBundle:Product')
@@ -82,21 +59,46 @@ class GetPhotosCommand extends DoctrineCommand
                                 array('ali_product_id'=> $aliProductId)
                             );
 
-        if ($product)
+        // If yes, then compare what our db thinks is the latest review against the most recent review uploaded to the ali site
+        if ($product){
             $needsScrape = $product->needsScrape($dateOfLatestReviewOnAli)? true : false;
 
+        //IF THE PRODUCT DOESN'T EXIST IN DB, CAN'T INSERT SCRAPED PHOTOS INTO DB B/C OF RELATIONSHIP OF PHOTO TO PRODUCT TABLE
+        } else {
+            throw new \InvalidArgumentException('Will not scrape because no product was found in db for ali_product_id '.$aliProductId);
+
+        }
+
         if(!$needsScrape){
-            $output->writeln("No new reviews with pics to scrape from aliexpress for product $ali_product_id because no new reviews were added since last crawl on".date('d M Y H:i', $product->getDateLastCrawled())."\n\n");
+            $output->writeln("No new reviews with pics to scrape from aliexpress for product $aliProductId because no new reviews were added since last crawl on".date('d M Y H:i', $product->getDateLastCrawled())."\n\n");
             return;
         }
 
-        /*
-        * EXTRACT userImgs from that $feedbacks array to supply as param to downloadAllUserImgs()
-        */
+        // Proceed with scraping
 
+        $feedbackUrl = $this->getFeedbackUrl($aliProductUrl);     
+
+        $feedbackHtmlString = $this->getFeedbackHtmlString($feedbackUrl);
+
+        echo "\n\nnum review pages with pics only: ";
+        echo $numReviewPages = $this->getNumReviewPages($feedbackHtmlString);
+
+        echo "\n\nnum reviews with pics: ";
+        echo $numReviewsWithPics = $this->getNumReviews($feedbackHtmlString);
+        
+        echo "\n\ndate of the latest review: ";
+        echo $dateOfLatestReviewOnAli = $this->getDateOfLatestReviewOnAli($feedbackHtmlString);
+
+        
+        $feedbackData = $this->getFeedbackData($feedbackUrl);//, $numReviewPages);
+        
+        // Is it better to pass $feedbackData array by reference instead of re-assigning array to the var???
+        $feedbackData = $this->getAliHelpfulCounts($aliProductId, $feedbackData);
+        
         // Download all userImgs into S3 buckets
         $output->writeln('start scraping photos for ali product id'.$aliProductId."\n\n");
-        $this->downloadAllUserImgs($userImgs, $feedbackUrl);        
+        $this->downloadAllUserImgs($feedbackData, $product);  
+
         return;
     }
 
@@ -129,7 +131,7 @@ class GetPhotosCommand extends DoctrineCommand
     * Submit the <form id="l-refresh-form" action={feedbackUrl}> with the input below set to true instead of false the way iframe initially loads
     *  <input type="hidden" id="withPictures" name="withPictures" value="true"/>
     */
-    public function getFeedbackUrlWithOnlyPics($feedbackUrl){
+    public function getFeedbackHtmlString($feedbackUrl){
 
         $fields = array(
             'evaSortValue' => 'sortlarest@feedback',
@@ -162,15 +164,60 @@ class GetPhotosCommand extends DoctrineCommand
 
         return $numReviewPages;
     }
- 
+
+    /*
+    * Get total number of reviews uploaded that have pics
+    * Example: from <div class="f-filter-list"><em>{numReviews}</em> 
+    */
+    public function getNumReviews($html_string)
+    {
+        $dom_feedback = new \DOMDocument();
+        @$dom_feedback->loadHTML($html_string);
+        $domxpath = new \DOMXPath($dom_feedback);
+        $review_page_nodelist = $domxpath->query("//div[@class='f-filter-list']/label[1]");
+        
+        foreach ($review_page_nodelist as $n) {
+            $text = $n->nodeValue;
+        }
+
+        $start_quote_pos = strpos($text, '(');
+        $end_quote_pos = strpos($text, ')');
+
+        $numReviews = intval(substr($text, $start_quote_pos + 1, $end_quote_pos - $start_quote_pos -1 ));
+
+        return $numReviews;
+    }
+
+
+    /*
+    * Get upload date of the most recent review
+    * by grabbing the 1st <dd class="r-time">
+    */
+    public function getDateOfLatestReviewOnAli($html_string)
+    {
+        $dom_feedback = new \DOMDocument();
+        @$dom_feedback->loadHTML($html_string);
+        $domxpath = new \DOMXPath($dom_feedback);
+
+        $results = $domxpath->query("//dd[@class='r-time']");
+
+        foreach ($results as $result) {
+           $dateOfLatestReview = $result->nodeValue;
+            break;
+        }
+
+
+        return strtotime($dateOfLatestReview);
+    }
+
      /*
     * Get all the feedback_ids, upload_dates, and urls for user images on each page of reviews
     * 
     */
 
-    public function getFeedbackBody($feedbackUrl, $numReviewPages = 1)
+    public function getFeedbackData($feedbackUrl, $numReviewPages = 3)
     {
-        $feedbacks = array();
+        $feedbackData = array();
 
         // Iterate through each page of reviews
         for ($i=1; $i <= $numReviewPages ; $i++) { 
@@ -219,8 +266,8 @@ class GetPhotosCommand extends DoctrineCommand
                 }
                 
                 // Load the elements of each review into this output array
-                $feedbacks[$ali_feedback_id] = array(
-                                                    'ali_upload_date'   => $ali_upload_date,
+                $feedbackData[$ali_feedback_id] = array(
+                                                    'ali_upload_date'   => strtotime($ali_upload_date),
                                                     'ali_helpful_count' => 0,
                                                     'userImgs'          => $userImgs,
                                                 );
@@ -233,77 +280,30 @@ class GetPhotosCommand extends DoctrineCommand
             echo "Delaying for $delay seconds between each feedback page's request\n\n";
             sleep($delay);
 
-        return $feedbacks;
-    }
- 
- 
-
-
-    /*
-    * Get total number of reviews uploaded that have pics
-    * Example: from <div class="f-filter-list"><em>{numReviews}</em> 
-    */
-    public function getNumReviews($html_string)
-    {
-        $dom_feedback = new \DOMDocument();
-        @$dom_feedback->loadHTML($html_string);
-        $domxpath = new \DOMXPath($dom_feedback);
-        $review_page_nodelist = $domxpath->query("//div[@class='f-filter-list']/label[1]");
-        
-        foreach ($review_page_nodelist as $n) {
-            $text = $n->nodeValue;
-        }
-
-        $start_quote_pos = strpos($text, '(');
-        $end_quote_pos = strpos($text, ')');
-
-        $numReviews = intval(substr($text, $start_quote_pos + 1, $end_quote_pos - $start_quote_pos -1 ));
-
-        return $numReviews;
-    }
-
-    /*
-    * Get upload date of the most recent review
-    * by grabbing the 1st <dd class="r-time">
-    */
-    public function getDateOfLatestReviewOnAli($html_string)
-    {
-        $dom_feedback = new \DOMDocument();
-        @$dom_feedback->loadHTML($html_string);
-        $domxpath = new \DOMXPath($dom_feedback);
-
-        $results = $domxpath->query("//dd[@class='r-time']");
-
-        foreach ($results as $result) {
-           $dateOfLatestReview = $result->nodeValue;
-            break;
-        }
-
-
-        return strtotime($dateOfLatestReview);
+        return $feedbackData;
     }
 
 
-    public function getAliProductIdFromFeedbackUrl($feedbackUrl)
-    {
-        parse_str( parse_url( $feedbackUrl, PHP_URL_QUERY));
+    // public function getAliProductIdFromFeedbackUrl($feedbackUrl)
+    // {
+    //     parse_str( parse_url( $feedbackUrl, PHP_URL_QUERY));
 
-        return $productId;
+    //     return $productId;
 
-    }
+    // }
 
 
-    public function getAliHelpfulCounts($ali_product_id, $feedbacks)
+    public function getAliHelpfulCounts($aliProductId, $feedbackData)
     {
         // Ajax Service can only take 10 feedback_ids at a time
-        $ali_feedback_ids = array_chunk(array_keys($feedbacks), 10);
+        $ali_feedback_ids = array_chunk(array_keys($feedbackData), 10);
 
         foreach ($ali_feedback_ids as $ids) {
 
             $url = 'http://feedback.aliexpress.com/display/DiggShowAjaxService.htm';
             $fields = array(
                     'evaluation_ids'=> implode(',', $ids),
-                    'product_id'    => $ali_product_id,
+                    'product_id'    => $aliProductId,
                     'from'          => 'detail',
                     'random'        => rand(0,5)/10
                 );
@@ -312,34 +312,36 @@ class GetPhotosCommand extends DoctrineCommand
             $helpful_counts = json_decode($json,true);
 
             foreach($helpful_counts['result'] as $id => $data){
-                $feedbacks[$id]['ali_helpful_count'] = $data['useful']; 
+                $feedbackData[$id]['ali_helpful_count'] = $data['useful']; 
             }
         }
-        return $feedbacks;
+        return $feedbackData;
     }
 
-    public function downloadAllUserImgs($userImgs, $feedbackUrl)
+    public function downloadAllUserImgs($feedbackData, Product $product)
     {
 
-        $ali_product_id = $this->getAliProductIdFromFeedbackUrl($feedbackUrl);
+        // $aliProductId = $this->getAliProductIdFromFeedbackUrl($feedbackUrl);
 
         /*
         * Use entity manager to locate the row in Product table associated with these user photos
         */ 
         try {
             
-            $product = $this->getContainer()
-                            ->get('doctrine')
-                            ->getRepository('AppBundle:Product')
-                            ->findOneBy(
-                                array('ali_product_id'=> $ali_product_id),
-                                array('id'=>'DESC')
-                            )
-                        ;
+            // $product = $this->getContainer()
+            //                 ->get('doctrine')
+            //                 ->getRepository('AppBundle:Product')
+            //                 ->findOneBy(
+            //                     array('ali_product_id'=> $aliProductId),
+            //                     array('id'=>'DESC')
+            //                 )
+            //             ;
             
             if (!$product) 
-                throw new Exception('No product found in db for ali_product_id '.$ali_product_id);
-                
+                throw new \InvalidArgumentException('No product found in db for the product object passed into downloadAllUserImgs() method');
+            
+            $aliProductId = $product->getAliProductId();
+
             $kernel = $this->getContainer()->get('kernel');
             $path = $kernel->locateResource('@AppBundle/Command/');
 
@@ -366,69 +368,89 @@ class GetPhotosCommand extends DoctrineCommand
             
             $bucket = 'test-galirie';
             
-            $key_prefix = $ali_product_id; 
+            $key_prefix = $aliProductId; 
             
-            foreach ($userImgs as $i => $aliImgUrl) { 
-          
-                /*
-                * Download the image into s3 bucket
-                */
+            $i = 0;
 
-                $key = "$ali_product_id-img$i.jpg";
-                // $key = "$this->ali_product_id-img0.jpg";
-
-                $data = array(
-                            'body'=>file_get_contents($aliImgUrl),
-                            'contentType'=>'image/jpeg', // always jpg?
-                           );
+            foreach ($feedbackData as $feedback_id => $data) {
                 
-                // Only upload to the s3 bucket if the object isn't already there
+                $ali_upload_date = $data['ali_upload_date'];
+                $ali_helpful_count = $data['ali_helpful_count'];
+                $userImgs = $data['userImgs'];
 
-                if(!file_exists('s3://'.$bucket.'/'.$key_prefix.'/'.$key)){
+                foreach ($userImgs as $n => $aliImgUrl) { 
+              
+                    /*
+                    * Download the image into s3 bucket
+                    */
 
-                    $result = file_put_contents('s3://'.$bucket.'/'.$key_prefix.'/'.$key, 
-                                $data, 0 , $context);
+                    $key = "$aliProductId-img$i.jpg";
+
+                    /*
+                    * UNCOMMENT DELAY BEFORE RUNNING SCRAPER AGAINST LIVE SITE FOR MULTIPLE PRODUCTS
+                    */
+                    $delay = 5; //in seconds, to rate limit my requests
+                    echo "Delaying for $delay seconds between downloading each user img\n\n";
+                    sleep($delay);
+
+                    $data = array(
+                                'body'=>file_get_contents($aliImgUrl),
+                                'contentType'=>'image/jpeg', // always jpg?
+                               );
                     
-                    if($result){
-                        echo "Done downloading : $key into s3 bucket: $bucket directory \n\n";
-                    } else {
-                        echo "An error occurred while trying to upload $key into  s3 bucket $bucket\n\n";  
-                        continue;
+                    // Only upload to the s3 bucket if the object isn't already there
+
+                    if(!file_exists('s3://'.$bucket.'/'.$key_prefix.'/'.$key)){
+
+                        $result = file_put_contents('s3://'.$bucket.'/'.$key_prefix.'/'.$key, 
+                                    $data, 0 , $context);
+                        
+                        if($result){
+                            echo "Done downloading : $key into s3 bucket: $bucket directory \n\n";
+                            $i++;
+                        } else {
+
+                            // Throw an exception and log the error
+                            echo "An error occurred while trying to upload $key into  s3 bucket $bucket\n\n";  
+                            $i++;
+                            continue;
+                        }
+
+                    } else { 
+                        echo "The photo $key is already in the s3 bucket $bucket.\n\n";
+                        $i++;
                     }
 
-                } else { 
-                    echo "The photo $key is already in the s3 bucket $bucket.\n\n";
+
+                    
+                    $aws_img_url = $s3Client->getObjectUrl($bucket, $key_prefix.'/'.$key);
+
+                    /*
+                    * Insert the aws_img_url along with other photo info into Photo table
+                    */
+
+                    //IF THE PHOTO'S ALREADY IN THE TABLE (that ali_img_url is already there), then don't replace it, move onto next img
+                    $photo = new Photo();
+                    
+                    $photo
+                            ->setProduct($product)
+                            ->setRating(0)
+                            ->setAliHelpfulCount($ali_helpful_count)
+                            ->setAwsImgUrl($aws_img_url)
+                            ->setAliImgUrl($aliImgUrl)
+                            ->setAliUploadDate($ali_upload_date)
+                    ;
+
+                    $em = $this->getEntityManager('default');
+                    $em->persist($photo);
+                    $em->flush();
+                    // break;
+                   
                 }
-
-
-                
-                $aws_img_url = $s3Client->getObjectUrl($bucket, $key_prefix.'/'.$key);
-
-                /*
-                * Insert the aws_img_url along with other photo info into Photo table
-                */
-
-                //IF THE PHOTO'S ALREADY IN THE TABLE (that ali_img_url is already there), then don't replace it, move onto next img
-                $photo = new Photo();
-                
-                $photo
-                        ->setProduct($product)
-                        ->setRating(0)
-                        ->setAliHelpfulCount(0)
-                        ->setAwsImgUrl($aws_img_url)
-                        ->setAliImgUrl($aliImgUrl)
-                        ->setAliUploadDate(0)
-                ;
-
-                $em = $this->getEntityManager('default');
-                $em->persist($photo);
-                $em->flush();
-                // break;
             }
-
-        } catch (Exception $e) {
+        } catch (\InvalidArgumentException $e) {
           
-            echo 'Caught exception: ',  $e->getMessage(), "\n";
+            echo $e->getMessage();
 
         }
 
@@ -442,7 +464,6 @@ class GetPhotosCommand extends DoctrineCommand
         $ch = curl_init();
 
         curl_setopt ($ch, CURLOPT_URL, $url);
-        // curl_setopt ($ch, CURLOPT_HEADER, true);
         curl_setopt ($ch, CURLOPT_USERAGENT, 'Frank/0.1 http://frank.elxr.it/bot.html');
 
         // send HTTP POST with parameters

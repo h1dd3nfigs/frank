@@ -24,7 +24,7 @@ class Photo
     /**
      * @var string
      *
-     * @ORM\Column(name="ali_img_url", type="string", length=255)
+     * @ORM\Column(name="ali_img_url", type="string", length=255, unique = true)
      */
     private $aliImgUrl;
 
@@ -60,8 +60,9 @@ class Photo
     /**
      * @ORM\ManyToOne(targetEntity="Product", inversedBy="photos")
      * @ORM\JoinColumn(name="product_id", referencedColumnName="id")
-     */
-    protected $product;
+    */
+    protected $product; //* @ORM\OrderBy({"ali_helpful_count" = "ASC"})
+
 
     /**
      * Get id
